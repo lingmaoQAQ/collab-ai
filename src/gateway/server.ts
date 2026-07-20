@@ -11,9 +11,12 @@ import { SessionStore } from "../sessions/store.js";
 import { ContextEngine } from "../context/engine.js";
 import { Mediator } from "../mediator/engine.js";
 import { showBanner } from "../ui/banner.js";
+import { log } from "../utils/log.js";
+import { closeDatabase } from "../sessions/database.js";
 import type { NodeMessage, GatewayMessage, GatewayNode } from "./types.js";
 
 const nodes = new Map<WebSocket, GatewayNode>();
+let _server: ReturnType<typeof createServer> | null = null;
 
 // LLM 懒加载
 let _runtime: any = null;
@@ -149,7 +152,7 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
           });
         }
       }
-    } catch { /* ignore */ }
+    } catch (err) { log.error("操作失败", err); }
 
     broadcast(roomId, { type: "joined", user: userName, workspace }, ws);
     console.log(`[Gateway] ${userName} → ${room.name} | 在线: ${nodes.size}`);
@@ -208,7 +211,7 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
                 projectContext: assembled.systemPromptAddition || "",
               }, _runtime, _model);
               crossUserText = enhanced.addition;
-            } catch { /* ignore */ }
+            } catch (err) { log.error("操作失败", err); }
 
             // 6. 组装最终 system prompt
             const ctxParts = [assembled.systemPromptAddition, crossUserText].filter(Boolean);
@@ -255,7 +258,7 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
                           ws.removeListener("message", handler);
                           resolve({ callId: tc.id, content: msg.result, isError: msg.isError });
                         }
-                      } catch { /* ignore */ }
+                      } catch (err) { log.error("操作失败", err); }
                     };
                     ws.on("message", handler);
                     send(ws, {
@@ -335,6 +338,7 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
     });
   });
 
+  _server = server;
   server.listen(port, () => {
     console.log("");
     showBanner("0.8.0", _model?.name || "AI", _model?.provider?.name || "", "Gateway", `:${port}`);
@@ -342,6 +346,22 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
     console.log(`  HTTP: http://localhost:${port}  |  WS: ws://localhost:${port}/ws`);
     console.log(`  认证: ${authStatus}  |  房间: ${roomMgr.list().length}  |  在线: ${nodes.size}\n`);
   });
+
+  // 优雅退出
+  const shutdown = () => {
+    console.log("\n  Gateway 正在关闭...");
+    for (const [ws, node] of nodes) {
+      send(ws, { type: "error", message: "Gateway 正在关闭" });
+      ws.close();
+    }
+    nodes.clear();
+    wss.close();
+    server.close();
+    closeDatabase();
+    process.exit(0);
+  };
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
 }
 
 function send(ws: WebSocket, msg: GatewayMessage): void {

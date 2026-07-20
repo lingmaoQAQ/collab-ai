@@ -308,6 +308,17 @@ export function registerChatCommand(program: Command): void {
         output: process.stdout,
         prompt: `[${room.name.slice(0, 12)}] > `,
       });
+
+      // 优雅退出
+      const shutdown = () => {
+        console.log(dim("\n  正在退出..."));
+        closeDatabase();
+        rl.close();
+        process.exit(0);
+      };
+      process.on("SIGINT", shutdown);
+      rl.on("close", () => closeDatabase());
+
       rl.prompt();
 
       for await (const line of rl) {
