@@ -13,11 +13,12 @@ export type NodeMessage =
 export type GatewayMessage =
   | { type: "welcome"; room: { id: string; name: string }; members: Array<{ name: string; workspace: string }> }
   | { type: "broadcast"; from: string; text: string; timestamp: string }
+  | { type: "ai_response"; text: string; timestamp: string }
+  | { type: "activity"; from: string; text: string; timestamp: string }
   | { type: "joined"; user: string; workspace: string }
   | { type: "left"; user: string }
   | { type: "memory_update"; key: string; value: string }
   | { type: "recall_result"; query: string; results: string }
-  | { type: "tool_call"; callId: string; tool: string; args: Record<string, string> }
   | { type: "error"; message: string };
 
 export interface GatewayNode {

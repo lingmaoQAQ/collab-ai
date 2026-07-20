@@ -149,14 +149,20 @@ export function registerChatCommand(program: Command): void {
           }
         });
 
-        // 收到广播消息
-        client.on("broadcast", (msg) => {
-          if (msg.type === "broadcast") {
-            console.log(`\n${bold(msg.from)}: ${msg.text}`);
+        // 收到 AI 回复
+        client.on("ai_response", (msg) => {
+          if (msg.type === "ai_response") {
+            console.log(`${aiPrefix()}${msg.text}`);
           }
         });
 
-        // 收到加入/离开通知
+        // 收到广播/通知
+        client.on("broadcast", (msg) => {
+          if (msg.type === "broadcast") console.log(`\n${bold(msg.from)}: ${msg.text}`);
+        });
+        client.on("activity", (msg) => {
+          if (msg.type === "activity") console.log(muted(`\n  ${msg.text}`));
+        });
         client.on("joined", (msg) => {
           if (msg.type === "joined") console.log(muted(`  → ${msg.user} 上线了 (${msg.workspace})`));
         });
