@@ -1,140 +1,163 @@
-# CollabAI 开发指南
+# CollabAI 开发指南 v0.6
 
 ## 支持平台
 
-- **Linux** (主力开发/部署)
 - **Windows** (开发/测试)
+- **Linux** (主力开发/部署)
 
 ## 环境要求
 
-| 依赖 | 最低版本 | Linux | Windows |
-|------|---------|-------|---------|
-| Node.js | >= 22 LTS | `nvm` / 包管理器 | 官网安装包 |
-| pnpm | >= 9 | `npm i -g pnpm` | `npm i -g pnpm` |
-| Git | >= 2.40 | 包管理器 | 官网安装包 |
-| TypeScript | >= 5.5 | 项目依赖 | 项目依赖 |
+| 依赖 | 最低版本 | 安装方式 |
+|------|---------|---------|
+| Node.js | >= 22 LTS | `nvm` / 官网 |
+| npm | >= 10 | 随 Node.js |
+| TypeScript | >= 5.8 | 项目依赖 |
 
 ## 快速开始
 
 ```bash
-# 克隆项目（未来）
 git clone <repo-url> collab-ai
 cd collab-ai
+npm install
+cp .env.example .env   # 编辑填入 API Key
 
-# 安装依赖
-pnpm install
-
-# 开发模式
-pnpm dev
-
-# 构建
-pnpm build
-
-# 测试
-pnpm test
+npm run build           # 编译
+npm run chat -- --new-room "项目名" --user "你的名字"   # 启动
 ```
 
 ## 项目架构
 
 ```
 collab-ai/
+├── cli.mjs                    # CLI 入口（ESM）
 ├── src/
-│   ├── llm/             # ✅ LLM 抽象层 — types / registry / runtime
-│   │   └── providers/   # ✅ Anthropic + OpenAI + Chat Completions
-│   ├── config/          # ✅ 配置系统 — 环境变量 + JSON
-│   ├── identity/        # ✅ 身份系统 — UserManager + RoomManager
-│   ├── sessions/        # ✅ 会话层 — room + user 隔离
-│   ├── memory/          # ✅ 记忆系统 — room 级共享
-│   ├── events/          # ✅ 事件系统 — 项目活动日志
-│   ├── cli/             # ✅ CLI — 多用户协作 chat
-│   ├── context/         # 🔲 上下文引擎 — UserContext + ProjectContext
-│   ├── agents/          # 🔲 Agent 层 — AI Agent 生命周期
-│   ├── workspace/       # 🔲 工作区层 — 文件隔离与合并
-│   ├── style/           # 🔲 风格引擎 — 开发者风格学习
-│   ├── channels/        # 🔲 通道层 — Slack/钉钉/Webhook
-│   └── merge/           # 🔲 合并引擎 — 语义冲突检测与解决
-├── packages/            # 🔲 可复用包
-├── docs/                 # 文档
-├── test/                 # 测试
-└── skills/               # AI 技能定义
+│   ├── llm/                   # ✅ LLM 抽象层
+│   │   ├── types.ts           #   Model, Message, Tool, StreamEvent
+│   │   ├── registry.ts        #   API Provider 注册表
+│   │   ├── runtime.ts         #   LlmRuntime 分发
+│   │   └── providers/
+│   │       ├── anthropic.ts   #   Anthropic Messages API (tool use)
+│   │       ├── openai.ts      #   OpenAI Responses API
+│   │       └── openai-completions.ts  # DeepSeek/Ollama 兼容
+│   ├── config/                # ✅ 配置系统
+│   ├── identity/              # ✅ 身份系统
+│   │   ├── types.ts           #   User, Room, RoomRole
+│   │   └── manager.ts         #   UserManager, RoomManager
+│   ├── sessions/              # ✅ 会话层（room+user隔离）
+│   │   ├── database.ts        #   SQLite schema（7张表）
+│   │   ├── types.ts           #   UserSession, SessionMessage
+│   │   ├── store.ts           #   SessionStore (CRUD)
+│   │   └── manager.ts         #   SessionManager (高层API)
+│   ├── memory/                # ✅ 项目共享记忆（room级）
+│   ├── events/                # ✅ 项目活动事件日志
+│   ├── context/               # ✅ Context Engine
+│   │   └── engine.ts          #   assemble(用户+项目→prompt)
+│   ├── mediator/              # ✅ AI Mediator
+│   │   └── engine.ts          #   whatsNew, enhanceContext, analyzeTurn
+│   ├── tools/                 # ✅ 工具系统
+│   │   ├── registry.ts        #   工具注册表
+│   │   ├── loop.ts            #   AI工具调用循环（runToolLoop）
+│   │   └── builtin/
+│   │       ├── bash.ts        #   run_command（安全沙箱）
+│   │       ├── file.ts        #   read_file, write_file, list_files
+│   │       └── search.ts      #   search_code（正则）
+│   ├── ui/                    # ✅ 终端UI
+│   │   ├── theme.ts           #   ANSI颜色方案（ClaudeCode风格）
+│   │   ├── format.ts          #   文本清理/Markdown渲染
+│   │   ├── stream.ts          #   StreamAssembler（无闪烁流式）
+│   │   ├── status.ts          #   状态栏（stderr动画）
+│   │   └── banner.ts          #   启动画面
+│   ├── cli/                   # ✅ CLI（Commander）
+│   │   └── commands/chat.ts   #   30+斜杠命令
+│   ├── workspace/             # 🔲 工作区隔离层
+│   ├── channels/              # 🔲 通知通道(Slack/钉钉)
+│   └── skills/                # 🔲 插件系统
+├── demo/                      # 演示脚本
+├── docs/                      # 设计文档
+│   ├── context-engine-design.md
+│   └── mediator-design.md
+└── test/                      # 集成测试
 ```
 
-## 核心模块依赖关系（当前 v0.3.0）
+## 数据库 Schema（7张表）
 
 ```
-cli/chat ← identity (UserManager, RoomManager)
-         ← sessions (SessionManager: room + user)
-         ← memory (MemoryStore: room 级共享)
-         ← events (EventStore: 协作日志)
-         ← llm (runtime + providers)
-         ← config
-```
-
-**隔离模型**：`Room > User > Session > Message`，每层都有外键约束。
-同一 Room 内共享 Memory 和 Events，Session 严格按 user_id 隔离。
-
-## 数据库 Schema
-
-```
-rooms ──┐                    project_memories ── room_id
-        │ 1:N                                  ── author_id → users
-  room_members (多对多)
+rooms ──┐
+        │ 1:N  room_members (多对多) ── users
+        │                                 │ author_id
+  user_sessions ── room_id, user_id        ↓
+    │ 1:N                          project_memories
+  session_messages
         │
-users ──┘
-
-user_sessions ── room_id → rooms
-              ── user_id → users
-              │ 1:N
-        session_messages
-
-project_events ── room_id → rooms
-               ── user_id → users
+  project_events ── room_id, user_id
 ```
 
-## 技术选型原则
+## 核心模块依赖
 
-- **协议/API 层** 参考 OpenClaw 的 gateway-protocol 分层设计
-- **存储** 默认 SQLite，参考 OpenClaw 的 Kysely 方案
-- **实时协作** CRDT 方案（Yjs 或 Automerge）
-- **代码分析** Tree-sitter，语言无关
-- **插件系统** 参考 OpenClaw plugin-sdk 的契约式接口
+```
+cli/chat ← mediator → context ← sessions
+         ← tools/loop
+         ← ui (theme, stream, banner)
+         ← llm (providers)
+         ← identity (UserManager, RoomManager)
+```
 
-## 平台差异处理
+## 命令行参考（30+ 命令）
 
-### Windows 注意事项
-- 路径分隔符统一用 `/` 或 `path.join()`
-- 避免 bash 脚本，用 Node.js 脚本或跨平台 npm scripts
-- 文件监听用 `chokidar`（处理 Windows 的 fs.watch 问题）
-- 换行符统一 LF，配置 `.gitattributes`
+```
+── 会话 ──
+/new <title>      创建新会话
+/load <id>        加载会话
+/list             列出会话
+/save             保存 & 生成摘要
+/clear            清除对话
+/export [file]    导出为 Markdown
 
-### Linux 注意事项
-- systemd 服务文件用于生产部署
-- 注意文件描述符限制（长连接场景）
-- SQLite WAL 模式在 Linux 下性能更好
+── 上下文 ──
+/context          查看三级上下文
+/context project  项目记忆详情
+/context user     用户风格/偏好
 
-## 编码规范
+── 工具 ──
+/tools            列出可用工具
+/run <cmd>        执行命令
+/cat <file>       读取文件
+/ls [path]        列出目录
+/search <regex>   搜索代码
 
-- TypeScript strict mode
-- 模块化优先 — 每个模块可独立测试
-- 接口契约 — 模块间通过明确类型定义通信
-- 错误处理 — 使用 Result 模式（参考 OpenClaw normalization-core）
-- 异步优先 — I/O 密集场景用异步操作
+── 协作 ──
+/rooms            项目空间列表
+/members          房间成员
+/invite <name>    邀请用户
+/events           最近活动
+/remember <k> <v> 记录共享记忆
+/recall <query>   搜索共享记忆
+/memories         查看所有记忆
 
-## 测试策略
+── 工作区 ──
+/workspace [path] 查看/切换工作目录
 
-| 层级 | 工具 | 说明 |
-|------|------|------|
-| 单元测试 | Vitest | 每个模块独立测试 |
-| 集成测试 | Vitest + SQLite 内存模式 | 模块间交互 |
-| E2E | Playwright (未来) | 多用户场景模拟 |
+── 其他 ──
+/model <id>       切换模型
+/help             显示帮助
+/quit             退出
+```
 
-## 参考项目源码
+## 愿景对照
 
-- `../openclaw-source/` — OpenClaw 源码（学习架构参考）
-  - `src/gateway/` — 网关/协议设计
-  - `src/agents/` — Agent 管理
-  - `src/sessions/` — 会话管理
-  - `src/context-engine/` — 上下文引擎
-  - `src/memory/` — 记忆系统
-  - `packages/gateway-protocol/` — 协议定义
-  - `packages/ai/` — AI 核心抽象
+| 文档需求 | 状态 | 实现 |
+|---------|------|------|
+| 单人上下文统一 | ✅ | sessions 持久化 + 自动恢复 |
+| 多用户不串上下文 | ✅ | identity Room/User 隔离 |
+| 文件互不干扰 | 🔲 | 需要 workspace 层 |
+| 项目统一认知 | ✅ | context + memory + mediator |
+| AI 了解每人风格 | ✅ | mediator analyzeTurn |
+| AI 作为中介协调 | 🟡 | mediator 跨用户感知 + 冲突提示 |
+| 实时通知 | 🔲 | 需要 channels 层 |
+| AI 自主工具调用 | ✅ | tools/loop (runToolLoop) |
+
+## 参考项目
+
+- `../openclaw-source/` — OpenClaw 源码（架构参考）
+- Claude Code — UI 风格参考
+- MiMo Code — 跨会话记忆参考
