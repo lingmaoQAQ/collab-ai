@@ -3,7 +3,7 @@
 import { Command } from "commander";
 import * as readline from "node:readline";
 import { resolve } from "node:path";
-import { writeFileSync } from "node:fs";
+import { writeFileSync, existsSync, readFileSync } from "node:fs";
 import { loadConfig } from "../../config/index.js";
 import {
   getDefaultRegistry, createLlmRuntime,
@@ -270,14 +270,35 @@ export function registerChatCommand(program: Command): void {
       const memory = new MemoryStore(room.id);
       const systemPrompt = options.system || config.systemPrompt;
 
-      // 自动恢复最近会话
-      const latest = sm.getLatestSession();
-      if (latest) {
-        const ctx = sm.loadSession(latest.id);
-        if (ctx) {
-          showBanner("1.0.0", model.name, model.provider.name, room.name, user.name);
-          console.log(dim("  ") + muted("已恢复: ") + sessionInfo(sm) + "\n");
+      // 断点检测
+      const checkpointFile = `${process.env.HOME || process.env.USERPROFILE}/.collab-ai/checkpoint.json`;
+      let recovered = false;
+      try {
+        if (existsSync(checkpointFile)) {
+          const cp = JSON.parse(readFileSync(checkpointFile, "utf-8"));
+          if (cp.roomId === room.id && cp.userId === user.id && cp.sessionId) {
+            const ctx = sm.loadSession(cp.sessionId);
+            if (ctx) {
+              recovered = true;
+            }
+          }
         }
+      } catch { /* ignore */ }
+
+      // 自动恢复最近会话
+      if (!recovered) {
+        const latest = sm.getLatestSession();
+        if (latest) {
+          const ctx = sm.loadSession(latest.id);
+          if (ctx) {
+            recovered = true;
+          }
+        }
+      }
+
+      if (recovered) {
+        showBanner("1.0.0", model.name, model.provider.name, room.name, user.name);
+        console.log(dim("  ") + muted("已恢复: ") + sessionInfo(sm) + "\n");
       }
       if (!sm.getCurrent()) {
         sm.startSession("新对话", model.id, systemPrompt);
@@ -313,15 +334,27 @@ export function registerChatCommand(program: Command): void {
         prompt: `[${room.name.slice(0, 12)}] > `,
       });
 
-      // 优雅退出
+      // 优雅退出 + 断点保存
+      const saveCheckpoint = () => {
+        try {
+          writeFileSync(checkpointFile, JSON.stringify({
+            roomId: room.id, userId: user.id, sessionId: sm.getCurrent()?.id,
+            timestamp: new Date().toISOString(),
+          }));
+        } catch { /* ignore */ }
+      };
       const shutdown = () => {
+        saveCheckpoint();
         console.log(dim("\n  正在退出..."));
         closeDatabase();
         rl.close();
         process.exit(0);
       };
       process.on("SIGINT", shutdown);
-      rl.on("close", () => closeDatabase());
+      process.on("SIGTERM", shutdown);
+      rl.on("close", () => { saveCheckpoint(); closeDatabase(); });
+      // 每次回复后自动保存
+      const autoSave = () => { saveCheckpoint(); };
 
       rl.prompt();
 
@@ -338,7 +371,7 @@ export function registerChatCommand(program: Command): void {
             await handleCommand(cmd, arg, {
               sm, runtime, model, memory, events,
               userMgr, roomMgr, user, room, engine, usage,
-              messages, systemPrompt, rl, config,
+              messages, systemPrompt, rl, config, registry,
             });
           } catch (err) {
             console.log(`Error: ${err instanceof Error ? err.message : err}`);
@@ -439,6 +472,7 @@ export function registerChatCommand(program: Command): void {
           const inTokens = estimateTokens(input);
           const outTokens = estimateTokens(text);
           usage.record(model, inTokens, outTokens);
+          autoSave();
           console.log(dim(`  (${outTokens} tok | ${usage.stats.requestCount}次 | $${usage.stats.cost.toFixed(4)})`));
 
           // 长对话提醒压缩
@@ -468,6 +502,7 @@ interface CmdCtx {
   sm: SessionManager;
   runtime: LlmRuntime;
   model: Model;
+  registry: ReturnType<typeof getDefaultRegistry>;
   memory: MemoryStore;
   events: EventStore;
   userMgr: UserManager;
@@ -484,7 +519,7 @@ interface CmdCtx {
 
 async function handleCommand(cmd: string, arg: string, ctx: CmdCtx) {
   const { sm, runtime, model, memory, events, userMgr, roomMgr, user, room,
-    engine, usage, messages, systemPrompt, rl } = ctx;
+    engine, usage, messages, systemPrompt, rl, registry } = ctx;
 
   switch (cmd) {
     case "/quit": case "/exit":
@@ -627,10 +662,79 @@ async function handleCommand(cmd: string, arg: string, ctx: CmdCtx) {
       break;
     }
 
+    // ---- 任务追踪 ----
+    case "/todo": {
+      const todoKey = "_todo_" + user.id;
+      if (!arg || arg === "list") {
+        const entry = memory.get(todoKey);
+        const items: string[] = entry ? JSON.parse(entry.value) : [];
+        if (!items.length) { console.log(muted("  暂无任务")); break; }
+        console.log(info(`\n  任务列表 (${items.length}):`));
+        for (let i = 0; i < items.length; i++) {
+          const done = items[i].startsWith("[x]");
+          console.log(
+            (done ? dim : bold)(`  ${i + 1}. `) +
+            (done ? dim(items[i].slice(4)) : items[i].slice(4)),
+          );
+        }
+        console.log("");
+      } else if (arg.startsWith("add ")) {
+        const task = arg.slice(4);
+        const entry = memory.get(todoKey);
+        const items: string[] = entry ? JSON.parse(entry.value) : [];
+        items.push("[ ] " + task);
+        memory.set({ key: todoKey, value: JSON.stringify(items), category: "general", authorId: user.id });
+        console.log(info(`  已添加: ${task}`));
+      } else if (arg.startsWith("done ")) {
+        const idx = parseInt(arg.slice(5)) - 1;
+        const entry = memory.get(todoKey);
+        const items: string[] = entry ? JSON.parse(entry.value) : [];
+        if (idx >= 0 && idx < items.length) {
+          items[idx] = items[idx].replace("[ ]", "[x]");
+          memory.set({ key: todoKey, value: JSON.stringify(items), category: "general", authorId: user.id });
+          console.log(info(`  已完成: ${items[idx].slice(4)}`));
+        }
+      } else if (arg === "clear") {
+        memory.set({ key: todoKey, value: "[]", category: "general", authorId: user.id });
+        console.log(muted("  任务已清空"));
+      } else {
+        console.log(muted("  /todo list | /todo add <任务> | /todo done <编号> | /todo clear"));
+      }
+      break;
+    }
+
     case "/model": {
-      const m = BUILTIN_MODELS.find((x) => x.id === arg);
-      if (m) { Object.assign(ctx, { model: m }); console.log(`已切换: ${m.name}`); }
-      else console.log(`可用: ${BUILTIN_MODELS.map((x) => x.id).join(", ")}`);
+      const newModel = BUILTIN_MODELS.find((x) => x.id === arg);
+      if (!newModel) {
+        console.log(muted(`  可用: ${BUILTIN_MODELS.map((x) => x.id).join(", ")}`));
+        break;
+      }
+      // 确保新模型的 provider 已注册
+      if (!registry.get(newModel.api)) {
+        if (newModel.api === "anthropic-messages" && process.env.ANTHROPIC_API_KEY) {
+          const { createAnthropicProvider } = await import("../../llm/providers/anthropic.js");
+          registry.register(createAnthropicProvider());
+        } else if (newModel.api === "openai-responses" && process.env.OPENAI_API_KEY) {
+          const { createOpenAIProvider } = await import("../../llm/providers/openai.js");
+          registry.register(createOpenAIProvider());
+        } else if (newModel.api === "openai-chat") {
+          const key = process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY;
+          if (key) {
+            const { createOpenAIChatProvider } = await import("../../llm/providers/openai-completions.js");
+            registry.register(createOpenAIChatProvider({
+              apiKey: key,
+              baseURL: process.env.DEEPSEEK_BASE_URL || process.env.OPENAI_BASE_URL || "https://api.deepseek.com/v1",
+              api: "openai-chat",
+            }));
+          }
+        }
+      }
+      if (!registry.get(newModel.api)) {
+        console.log(error(`  模型 ${newModel.name} 的 API Key 未配置`));
+        break;
+      }
+      Object.assign(ctx, { model: newModel, runtime: createLlmRuntime(registry) });
+      console.log(info(`  已切换: ${newModel.name} (${newModel.provider.name})`));
       break;
     }
 

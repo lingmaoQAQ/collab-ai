@@ -1,6 +1,6 @@
 // 文件读写工具
-import { readFileSync, writeFileSync, existsSync, statSync, readdirSync } from "node:fs";
-import { resolve, relative } from "node:path";
+import { readFileSync, writeFileSync, existsSync, statSync, readdirSync, mkdirSync } from "node:fs";
+import { resolve, relative, dirname } from "node:path";
 import { registerTool } from "../registry.js";
 
 function safePath(requested: string): string {
@@ -138,5 +138,70 @@ registerTool(
       }
     });
     return { callId: "", content: `${fullPath}\n${lines.join("\n")}` };
+  },
+);
+
+registerTool(
+  {
+    name: "edit_file",
+    description: "精确编辑文件：查找 old_string 并替换为 new_string。old_string 必须在文件中唯一，否则失败。参考 Claude Code 的编辑工具。",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "文件路径（相对于项目目录）" },
+        old_string: { type: "string", description: "要替换的原始文本（必须唯一匹配）" },
+        new_string: { type: "string", description: "替换后的新文本" },
+      },
+      required: ["path", "old_string", "new_string"],
+    },
+  },
+  async (args) => {
+    const fullPath = safePath(args.path);
+    if (!existsSync(fullPath)) {
+      return { callId: "", content: `文件不存在: ${args.path}`, isError: true };
+    }
+
+    const content = readFileSync(fullPath, "utf-8");
+    const oldStr = args.old_string;
+    const newStr = args.new_string;
+
+    // 计算 old_string 出现次数
+    let idx = 0, count = 0, lastIdx = -1;
+    while ((idx = content.indexOf(oldStr, idx)) !== -1) {
+      count++;
+      lastIdx = idx;
+      idx += oldStr.length || 1; // 防止空字符串无限循环
+    }
+
+    if (count === 0) {
+      return { callId: "", content: `未找到匹配文本:\n${oldStr.slice(0, 200)}`, isError: true };
+    }
+    if (count > 1) {
+      return {
+        callId: "",
+        content: `匹配到 ${count} 处，old_string 必须唯一。请提供更多上下文使匹配唯一。`,
+        isError: true,
+      };
+    }
+
+    // 确保父目录存在
+    mkdirSync(dirname(fullPath), { recursive: true });
+
+    const newContent = content.slice(0, lastIdx) + newStr + content.slice(lastIdx + oldStr.length);
+    writeFileSync(fullPath, newContent, "utf-8");
+    const rel = relative(process.cwd(), fullPath);
+
+    // 显示变化
+    const oldLines = oldStr.split("\n");
+    const newLines = newStr.split("\n");
+    const lineDiff = newLines.length - oldLines.length;
+
+    return {
+      callId: "",
+      content: `已编辑: ${rel}\n` +
+        `  - ${oldStr.slice(0, 80).replace(/\n/g, "\\n")}\n` +
+        `  + ${newStr.slice(0, 80).replace(/\n/g, "\\n")}` +
+        (lineDiff !== 0 ? `\n  (${lineDiff > 0 ? "+" : ""}${lineDiff}行)` : ""),
+    };
   },
 );
