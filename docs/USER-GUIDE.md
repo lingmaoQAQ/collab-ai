@@ -120,9 +120,61 @@ npm run chat -- --connect ws://192.168.1.100:3000 --room <项目ID> --user Bob  
 | `/todo done <编号>` | 标记完成 |
 | `/todo clear` | 清空任务 |
 
+### 组织拓扑
+
+| 命令 | 说明 |
+|------|------|
+| `/org` | 查看完整组织拓扑 |
+| `/group` | 查看自己所属的子组和成员 |
+| `/task send <用户> <消息>` | 发送结构化任务 |
+| `/task skills <技能>` | 查找拥有特定技能的成员 |
+
 ### 会话恢复
 
 CollabAI 在每次对话后自动保存断点。异常退出后重新启动，自动恢复到最后的会话状态。
+
+## 组织结构（Org Graph）
+
+在项目根目录创建 `.collab-ai/org-graph.yml`：
+
+```yaml
+version: "0.2"
+nodes:
+  - id: math-group
+    type: group
+    name: "数学与算法组"
+    skills: ["python", "sympy"]
+    
+  - id: alice
+    type: leaf
+    parent: math-group
+    name: "Alice"
+    skills: ["python", "sympy", "群论"]
+    workspace: "./demo/mathematics"
+```
+
+CollabAI 自动读取这个文件，AI 会知道：
+- 谁在哪个组
+- 谁擅长什么技能
+- 任务应该发给谁（/task skills python → Alice）
+
+## Gateway 网络模式
+
+```bash
+# 启动 Gateway（中心服务器）
+npm run gateway -- --port 3000 --token mysecret
+
+# 从任意机器接入
+npm run chat -- --connect ws://IP:3000 --token mysecret \
+  --room <id> --user Alice -w ~/projects/math
+```
+
+Gateway 模式支持：
+- 实时聊天 + AI 回复（带完整项目上下文）
+- 结构化任务消息（单播/广播 + 子组路由）
+- 共享记忆同步
+- 工具远程执行
+- 成员上下线通知
 
 ### 协作命令
 

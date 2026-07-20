@@ -13,6 +13,7 @@
     "start": "node cli.mjs",
     "chat": "node cli.mjs chat",
     "gateway": "node cli.mjs gateway",
+    "test": "node --import tsx test/regression.ts && node --import tsx test/tier2-test.ts && node --import tsx test/new-features.ts",
     "clean": "rm -rf dist"
   },
   "dependencies": {

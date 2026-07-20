@@ -1,4 +1,4 @@
-# CollabAI 开发指南 v0.6
+# CollabAI 开发指南 v1.1
 
 ## 支持平台
 
@@ -69,10 +69,12 @@ collab-ai/
 │   │   └── banner.ts          #   启动画面
 │   ├── cli/                   # ✅ CLI（Commander）
 │   │   └── commands/chat.ts   #   30+斜杠命令
+│   ├── gateway/               # ✅ Gateway 网络层（HTTP+WS+AI）
+│   ├── org/                    # ✅ 组织拓扑（树形 Org Graph）
 │   ├── workspace/             # 🔲 工作区隔离层
-│   ├── channels/              # 🔲 通知通道(Slack/钉钉)
-│   └── skills/                # 🔲 插件系统
-├── demo/                      # 演示脚本
+│   └── channels/              # 🔲 通知通道(Slack/钉钉)
+├── demo/mathematics/          # 演示项目 + 5个测试脚本
+├── test/                      # 回归测试（3套）
 ├── docs/                      # 设计文档
 │   ├── context-engine-design.md
 │   └── mediator-design.md
