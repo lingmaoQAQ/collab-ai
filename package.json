@@ -12,6 +12,7 @@
     "dev": "node --import tsx cli.mjs",
     "start": "node cli.mjs",
     "chat": "node cli.mjs chat",
+    "gateway": "node cli.mjs gateway",
     "clean": "rm -rf dist"
   },
   "dependencies": {
@@ -19,11 +20,13 @@
     "better-sqlite3": "^12.11.1",
     "commander": "^15.0.0",
     "dotenv": "^17.4.2",
-    "openai": "^6.45.0"
+    "openai": "^6.45.0",
+    "ws": "^8.21.1"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^24.0.0",
+    "@types/ws": "^8.18.1",
     "tsx": "^4.19.0",
     "typescript": "^5.8.0"
   },

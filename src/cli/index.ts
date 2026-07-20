@@ -2,6 +2,7 @@
 
 import { Command } from "commander";
 import { registerChatCommand } from "./commands/chat.js";
+import { registerGatewayCommand } from "./commands/gateway.js";
 
 export function createProgram(): Command {
   const program = new Command();
@@ -9,10 +10,10 @@ export function createProgram(): Command {
   program
     .name("collab-ai")
     .description("AI 多用户协作框架 — 让 AI 成为团队的技术协作者")
-    .version("0.1.0");
+    .version("0.7.0");
 
-  // 注册子命令
   registerChatCommand(program);
+  registerGatewayCommand(program);
 
   return program;
 }

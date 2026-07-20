@@ -115,7 +115,101 @@ export function registerChatCommand(program: Command): void {
     .option("-u, --user <name>", "用户身份")
     .option("-r, --room <id>", "项目空间 ID")
     .option("--new-room <name>", "创建新项目空间")
+    .option("--connect <url>", "连接到 Gateway（如 ws://localhost:3000）")
+    .option("-w, --workspace <path>", "工作区路径（Gateway 模式）")
     .action(async (options) => {
+      // ── Gateway 模式：连接远程服务器 ──
+      if (options.connect) {
+        const { GatewayClient } = await import("../../gateway/client.js");
+        const client = new GatewayClient();
+        const wsUrl = options.connect;
+        const roomId = options.room || "default";
+        const userName = options.user || "developer";
+        const workspace = options.workspace || process.cwd();
+
+        console.log(`\n  CollabAI Node v0.7.0`);
+        console.log(`  连接: ${wsUrl}`);
+        console.log(`  房间: ${roomId} | 用户: ${userName}`);
+        console.log(`  工作区: ${workspace}\n`);
+
+        try {
+          await client.connect(wsUrl, roomId, userName, workspace);
+        } catch (err) {
+          console.log(error(`  连接失败: ${err instanceof Error ? err.message : err}`));
+          console.log(muted("  提示: 请先启动 Gateway: npm run gateway -- --port 3000\n"));
+          process.exit(1);
+        }
+
+        // 收到欢迎消息
+        client.on("welcome", (msg) => {
+          if (msg.type === "welcome") {
+            console.log(info(`  已加入房间: ${msg.room.name}`));
+            console.log(muted(`  在线成员: ${msg.members.map((m) => `${m.name}(${m.workspace})`).join(", ")}`));
+            console.log("");
+          }
+        });
+
+        // 收到广播消息
+        client.on("broadcast", (msg) => {
+          if (msg.type === "broadcast") {
+            console.log(`\n${bold(msg.from)}: ${msg.text}`);
+          }
+        });
+
+        // 收到加入/离开通知
+        client.on("joined", (msg) => {
+          if (msg.type === "joined") console.log(muted(`  → ${msg.user} 上线了 (${msg.workspace})`));
+        });
+        client.on("left", (msg) => {
+          if (msg.type === "left") console.log(muted(`  ← ${msg.user} 下线了`));
+        });
+        client.on("error", (msg) => {
+          if (msg.type === "error") console.log(error(`  Gateway: ${msg.message}`));
+        });
+
+        // 交互循环
+        const rl = readline.createInterface({
+          input: process.stdin, output: process.stdout,
+          prompt: `[${userName}] > `,
+        });
+        rl.prompt();
+
+        for await (const line of rl) {
+          const input = line.trim();
+          if (!input) { rl.prompt(); continue; }
+          if (input === "/quit" || input === "/exit") {
+            client.disconnect();
+            rl.close();
+            process.exit(0);
+          }
+          if (input === "/members") {
+            // 不做什么，成员列表在 welcome 中已显示
+          } else if (input.startsWith("/remember ")) {
+            const [, key, ...vp] = input.split(" ");
+            client.remember(key, vp.join(" "));
+            console.log(muted(`  已同步记忆: ${key}`));
+          } else if (input.startsWith("/recall ")) {
+            const query = input.slice(8).trim();
+            client.recall(query);
+            client.on("recall_result", (msg) => {
+              if (msg.type === "recall_result" && msg.query === query) {
+                console.log(msg.results || "无结果");
+              }
+            });
+          } else if (input === "/help") {
+            console.log(dim("  /remember <k> <v>  记录共享记忆"));
+            console.log(dim("  /recall <query>    搜索共享记忆"));
+            console.log(dim("  /members           查看在线成员"));
+            console.log(dim("  /quit              断开连接"));
+          } else {
+            client.chat(input);
+          }
+          rl.prompt();
+        }
+        return;
+      }
+
+      // ── 本地模式：完整功能 ──
       const config = loadConfig();
       const model = findModel(options.model || config.model);
       const registry = initProviders();
