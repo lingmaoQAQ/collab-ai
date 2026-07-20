@@ -2,6 +2,8 @@
 
 import { Command } from "commander";
 import * as readline from "node:readline";
+import { resolve } from "node:path";
+import { writeFileSync } from "node:fs";
 import { loadConfig } from "../../config/index.js";
 import {
   getDefaultRegistry, createLlmRuntime,
@@ -27,6 +29,7 @@ import {
   bold, modelColor,
 } from "../../ui/index.js";
 import { getToolDefs, executeTool, toolCount } from "../../tools/index.js";
+import { runToolLoop } from "../../tools/loop.js";
 
 // ---- 工具函数 ----
 
@@ -268,27 +271,49 @@ export function registerChatCommand(program: Command): void {
             ? `${ctxAdditions}\n\n---\n\n${systemPrompt}`
             : systemPrompt;
 
-          const stream = runtime.stream({
-            model, system: finalSystem,
-            messages: assembled.messages,
-            maxTokens: config.maxTokens, temperature: config.temperature,
-          });
-
-          // 使用 StreamRenderer 实现无闪烁流式输出
+          // AI 工具调用循环（带 fallback 到纯文本）
           const renderer = createStreamRenderer();
           let text = "";
-          for await (const event of stream) {
-            if (event.type === "text_delta") {
-              text += event.text;
-              renderer.write(event.text);
-            } else if (event.type === "error") {
-              throw new Error(event.error);
+          let toolCount = 0;
+          try {
+            const result = await runToolLoop({
+              runtime, model,
+              system: finalSystem,
+              messages: assembled.messages
+                .filter((m) => m.role !== "system")
+                .map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+              maxToolRounds: 5,
+              maxTokens: config.maxTokens, temperature: config.temperature,
+              onText: (t) => renderer.write(t),
+              onToolUse: (tc) => {
+                toolCount++;
+                console.log("\n" + muted("  ⚡ " + tc.name + " ") + dim(Object.values(tc.arguments).join(" ").slice(0, 60)));
+              },
+            });
+            text = result.finalText;
+            if (!renderer.hasOutput() && text) {
+              process.stdout.write(aiPrefix() + text + "\n");
             }
+            renderer.done();
+            if (toolCount > 0) {
+              console.log(dim(`  (${toolCount} 个工具调用)\n`));
+            }
+          } catch {
+            // Fallback: 简单流式
+            const stream = runtime.stream({
+              model, system: finalSystem,
+              messages: assembled.messages,
+              maxTokens: config.maxTokens, temperature: config.temperature,
+            });
+            for await (const event of stream) {
+              if (event.type === "text_delta") { text += event.text; renderer.write(event.text); }
+              else if (event.type === "error") throw new Error(event.error);
+            }
+            if (!renderer.hasOutput() && text) {
+              process.stdout.write(aiPrefix() + text + "\n");
+            }
+            renderer.done();
           }
-          if (!renderer.hasOutput() && text) {
-            process.stdout.write(aiPrefix() + text + "\n");
-          }
-          renderer.done();
 
           messages.push({ role: "assistant", content: text });
           sm.saveMessage("assistant", text);
@@ -586,6 +611,59 @@ async function handleCommand(cmd: string, arg: string, ctx: CmdCtx) {
       if (!arg) { console.log(error("  用法: /search <正则>")); break; }
       const result = await executeTool({ id: "cli", name: "search_code", arguments: { pattern: arg } });
       console.log(result.isError ? error(result.content) : result.content);
+      break;
+    }
+
+    // ---- 工作区管理 ----
+    case "/workspace": {
+      if (!arg) {
+        console.log(info("\n  当前工作区: ") + process.cwd());
+        const result = await executeTool({ id: "cli", name: "list_files", arguments: { path: "." } });
+        console.log("\n" + result.content.split("\n").slice(1).join("\n"));
+      } else {
+        try {
+          process.chdir(arg);
+          console.log(info("  工作区已切换: ") + process.cwd());
+        } catch {
+          console.log(error("  无效路径: " + arg));
+        }
+      }
+      console.log("");
+      break;
+    }
+
+    // ---- 会话导出 ----
+    case "/export": {
+      const s = sm.getCurrent();
+      if (!s) { console.log(muted("  无活跃会话")); break; }
+      const msgs = sm.getMessages();
+      const filename = arg || `session-${s.id.slice(0, 8)}.md`;
+      const content = [
+        `# ${s.title}`,
+        `> 模型: ${s.modelId} | 消息: ${msgs.length} | ${new Date().toISOString()}`,
+        "",
+        ...msgs.map((m) => `**${m.role}**: ${m.content}\n`),
+      ].join("\n");
+      const filePath = resolve(process.cwd(), filename);
+      writeFileSync(filePath, content, "utf-8");
+      console.log(info(`  已导出: ${filename} (${content.length} 字节)`));
+      break;
+    }
+
+    // ---- 记忆管理 ----
+    case "/memories": {
+      const mems = memory.list();
+      if (!mems.length) { console.log(muted("  暂无项目记忆")); break; }
+      console.log(info(`\n  项目记忆 (${mems.length}):`));
+      for (const m of mems) {
+        const author = m.authorId ? userMgr.get(m.authorId)?.name || m.authorId.slice(0, 6) : "未知";
+        console.log(
+          "  " + bold(`[${m.category}]`) + " " + m.key +
+          dim(" — ") + m.value.slice(0, 60) +
+          dim(" (" + author + ")"),
+        );
+      }
+      console.log("");
       break;
     }
 

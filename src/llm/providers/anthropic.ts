@@ -62,6 +62,7 @@ export function createAnthropicProvider(apiKey?: string): ApiProvider {
 
     let inputTokens = 0;
     let outputTokens = 0;
+    const toolInputs = new Map<string, string>();  // 累积工具参数
 
     for await (const event of response) {
       switch (event.type) {
@@ -73,21 +74,35 @@ export function createAnthropicProvider(apiKey?: string): ApiProvider {
         case "content_block_delta":
           if (event.delta.type === "text_delta") {
             yield { type: "text_delta", text: event.delta.text };
+          } else if (event.delta.type === "input_json_delta") {
+            // 累积工具参数 JSON（index 在 event 级别）
+            const idx = event.index.toString();
+            const prev = toolInputs.get(idx) || "";
+            toolInputs.set(idx, prev + (event.delta.partial_json || ""));
           }
           break;
 
         case "content_block_start":
           if (event.content_block.type === "tool_use") {
-            yield {
-              type: "tool_use",
-              tool: {
-                id: event.content_block.id,
-                name: event.content_block.name,
-                input: {}, // 初始为空，后续累积
-              },
-            };
+            // 记录工具块索引
+            toolInputs.set(event.index.toString(), "");
           }
           break;
+
+        case "content_block_stop": {
+          // 工具块完成时，解析累积的 JSON
+          const idx = event.index.toString();
+          const jsonStr = toolInputs.get(idx);
+          if (jsonStr) {
+            try {
+              const input = JSON.parse(jsonStr);
+              yield { type: "tool_use", tool: { id: `toolu_${idx}`, name: "", input } };
+            } catch {
+              // 忽略解析失败
+            }
+          }
+          break;
+        }
 
         case "message_delta":
           outputTokens += event.usage.output_tokens;
