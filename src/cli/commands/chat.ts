@@ -16,6 +16,7 @@ import { getDatabase, closeDatabase } from "../../sessions/database.js";
 import { SessionManager, generateTitle } from "../../sessions/manager.js";
 import { ContextEngine } from "../../context/engine.js";
 import { compactConversation } from "../../context/compact.js";
+import { UsageTracker, estimateTokens } from "../../utils/usage.js";
 import { Mediator } from "../../mediator/engine.js";
 import { UserManager, RoomManager } from "../../identity/manager.js";
 import { MemoryStore } from "../../memory/store.js";
@@ -226,6 +227,7 @@ export function registerChatCommand(program: Command): void {
       const db = getDatabase();
       const engine = new ContextEngine(db);
       const mediator = new Mediator(db);
+      const usage = new UsageTracker();
 
       // ---- 身份和房间初始化 ----
       const userMgr = new UserManager(db);
@@ -335,7 +337,7 @@ export function registerChatCommand(program: Command): void {
           try {
             await handleCommand(cmd, arg, {
               sm, runtime, model, memory, events,
-              userMgr, roomMgr, user, room, engine,
+              userMgr, roomMgr, user, room, engine, usage,
               messages, systemPrompt, rl, config,
             });
           } catch (err) {
@@ -433,6 +435,12 @@ export function registerChatCommand(program: Command): void {
           sm.saveMessage("assistant", text);
           events.record(room.id, user.id, "message_sent", { sessionId: sm.getCurrent()?.id });
 
+          // Token 用量记录
+          const inTokens = estimateTokens(input);
+          const outTokens = estimateTokens(text);
+          usage.record(model, inTokens, outTokens);
+          console.log(dim(`  (${outTokens} tok | ${usage.stats.requestCount}次 | $${usage.stats.cost.toFixed(4)})`));
+
           // 长对话提醒压缩
           if (messages.filter((m) => m.role !== "system").length > 20) {
             console.log(muted(`  💡 对话较长，建议 /compact 压缩上下文以节省 token`));
@@ -467,6 +475,7 @@ interface CmdCtx {
   user: User;
   room: Room;
   engine: ContextEngine;
+  usage: UsageTracker;
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
   systemPrompt: string;
   rl: readline.Interface;
@@ -475,7 +484,7 @@ interface CmdCtx {
 
 async function handleCommand(cmd: string, arg: string, ctx: CmdCtx) {
   const { sm, runtime, model, memory, events, userMgr, roomMgr, user, room,
-    engine, messages, systemPrompt, rl } = ctx;
+    engine, usage, messages, systemPrompt, rl } = ctx;
 
   switch (cmd) {
     case "/quit": case "/exit":
@@ -557,6 +566,11 @@ async function handleCommand(cmd: string, arg: string, ctx: CmdCtx) {
       } catch { /* ignore */ }
       sm.touch(session.id);
       console.log(`已保存: ${sessionInfo(sm)}`);
+      break;
+    }
+
+    case "/usage": {
+      console.log(info(`\n  ${usage.summary()}`));
       break;
     }
 
