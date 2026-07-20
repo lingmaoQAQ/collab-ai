@@ -39,5 +39,19 @@ export {
 // Config
 export { loadConfig, getApiKey, DEFAULT_CONFIG, type CollabAIConfig } from "./config/index.js";
 
+// Sessions
+export {
+  SessionManager,
+  generateTitle,
+  generateSummary,
+} from "./sessions/manager.js";
+export { SessionStore } from "./sessions/store.js";
+export { getDatabase, closeDatabase } from "./sessions/database.js";
+export type { Session, Message as SessionMessage, SessionSummary } from "./sessions/types.js";
+
+// Memory
+export { MemoryStore } from "./memory/store.js";
+export type { MemoryEntry } from "./memory/types.js";
+
 // CLI
 export { createProgram, runCli } from "./cli/index.js";
