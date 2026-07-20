@@ -176,4 +176,38 @@ export const BUILTIN_MODELS: Model[] = [
     reasoning: false,
     input: ["text", "image"],
   },
+  // DeepSeek (OpenAI Chat Completions 兼容)
+  {
+    id: "deepseek-chat",
+    name: "DeepSeek Chat",
+    api: "openai-chat",
+    provider: { id: "deepseek", name: "DeepSeek" },
+    contextWindow: 128_000,
+    maxTokens: 8192,
+    cost: { input: 0.27, output: 1.1 },
+    reasoning: false,
+    input: ["text"],
+  },
+  {
+    id: "deepseek-reasoner",
+    name: "DeepSeek Reasoner",
+    api: "openai-chat",
+    provider: { id: "deepseek", name: "DeepSeek" },
+    contextWindow: 128_000,
+    maxTokens: 8192,
+    cost: { input: 0.55, output: 2.19 },
+    reasoning: true,
+    input: ["text"],
+  },
+  // 通用 OpenAI Chat 兼容（Ollama / vLLM / 自定义）
+  {
+    id: "openai-chat",
+    name: "OpenAI Chat Compatible",
+    api: "openai-chat",
+    provider: { id: "openai", name: "OpenAI" },
+    contextWindow: 128_000,
+    maxTokens: 4096,
+    reasoning: false,
+    input: ["text"],
+  },
 ];

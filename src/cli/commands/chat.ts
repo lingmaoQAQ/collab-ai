@@ -8,6 +8,7 @@ import {
   createLlmRuntime,
   createAnthropicProvider,
   createOpenAIProvider,
+  createOpenAIChatProvider,
   BUILTIN_MODELS,
 } from "../../llm/index.js";
 import type { Message, StreamEvent, ToolUse } from "../../llm/types.js";
@@ -25,17 +26,32 @@ function findModel(modelId: string) {
 function initProviders() {
   const registry = getDefaultRegistry();
 
-  // 有 key 就注册对应的 provider
+  // Anthropic
   if (process.env.ANTHROPIC_API_KEY) {
     registry.register(createAnthropicProvider());
   }
+  // OpenAI Responses API
   if (process.env.OPENAI_API_KEY) {
     registry.register(createOpenAIProvider());
+  }
+  // OpenAI Chat Completions 兼容接口（DeepSeek / Ollama / 自定义）
+  const chatApiKey = process.env.OPENAI_CHAT_API_KEY ||
+    process.env.DEEPSEEK_API_KEY ||
+    process.env.OPENAI_API_KEY;
+  const chatBaseUrl = process.env.OPENAI_CHAT_BASE_URL ||
+    process.env.DEEPSEEK_BASE_URL ||
+    process.env.OPENAI_BASE_URL;
+  if (chatApiKey || chatBaseUrl) {
+    registry.register(createOpenAIChatProvider({
+      apiKey: chatApiKey || "ollama", // Ollama 不需要 key
+      baseURL: chatBaseUrl,
+      api: "openai-chat",
+    }));
   }
 
   if (registry.list().length === 0) {
     throw new Error(
-      "No API key found. Set ANTHROPIC_API_KEY or OPENAI_API_KEY in .env or environment.",
+      "No API key found. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or DEEPSEEK_API_KEY.",
     );
   }
 

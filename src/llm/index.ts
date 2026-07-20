@@ -7,3 +7,5 @@ export { createLlmRuntime } from "./runtime.js";
 export type { LlmRuntime } from "./runtime.js";
 export { createAnthropicProvider } from "./providers/anthropic.js";
 export { createOpenAIProvider } from "./providers/openai.js";
+export { createOpenAIChatProvider } from "./providers/openai-completions.js";
+export type { OpenAIChatProviderOptions } from "./providers/openai-completions.js";
