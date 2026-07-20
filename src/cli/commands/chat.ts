@@ -17,7 +17,7 @@ import { SessionManager, generateTitle } from "../../sessions/manager.js";
 import { ContextEngine } from "../../context/engine.js";
 import { compactConversation } from "../../context/compact.js";
 import { UsageTracker, estimateTokens } from "../../utils/usage.js";
-import { loadOrgGraph, describeOrg, findNode, findBySkill } from "../../org/index.js";
+import { loadOrgGraph, describeOrg, findNode, findBySkill, findGroup, getGroupMembers, getSiblings } from "../../org/index.js";
 import { Mediator } from "../../mediator/engine.js";
 import { UserManager, RoomManager } from "../../identity/manager.js";
 import { MemoryStore } from "../../memory/store.js";
@@ -327,13 +327,13 @@ export function registerChatCommand(program: Command): void {
       }
 
       if (recovered) {
-        showBanner("1.0.0", model.name, model.provider.name, room.name, user.name);
+        showBanner("1.1.0", model.name, model.provider.name, room.name, user.name);
         console.log(dim("  ") + muted("已恢复: ") + sessionInfo(sm) + "\n");
       }
       if (!sm.getCurrent()) {
         sm.startSession("新对话", model.id, systemPrompt);
         events.record(room.id, user.id, "session_started", {});
-        showBanner("1.0.0", model.name, model.provider.name, room.name, user.name);
+        showBanner("1.1.0", model.name, model.provider.name, room.name, user.name);
       }
 
       // 显示自上次以来的变化
@@ -694,6 +694,22 @@ async function handleCommand(cmd: string, arg: string, ctx: CmdCtx) {
 
     // ---- 任务追踪 ----
     // ---- 组织拓扑 ----
+    // ---- 子组协调 ----
+    case "/group": {
+      const graph = loadOrgGraph();
+      if (!graph) { console.log(muted("  未找到 org-graph.yml")); break; }
+      const myGroup = findGroup(graph, user.id);
+      if (!myGroup) { console.log(muted("  你不在任何组中")); break; }
+      const members = getGroupMembers(graph, myGroup.id);
+      const siblings = getSiblings(graph, user.id);
+      console.log(info(`\n  你的组: ${myGroup.name} (${myGroup.id})`));
+      console.log(dim("  成员: ") + members.map((m) => m.name).join(", "));
+      if (siblings.length) console.log(dim("  同级: ") + siblings.map((s) => s.name).join(", "));
+      if (myGroup.skills?.length) console.log(dim("  组技能: ") + myGroup.skills.join(", "));
+      console.log("");
+      break;
+    }
+
     case "/org": {
       const graph = loadOrgGraph();
       if (!graph) { console.log(muted("  未找到 .collab-ai/org-graph.yml")); break; }

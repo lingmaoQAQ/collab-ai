@@ -13,6 +13,7 @@ import { Mediator } from "../mediator/engine.js";
 import { showBanner } from "../ui/banner.js";
 import { log } from "../utils/log.js";
 import { closeDatabase } from "../sessions/database.js";
+import { loadOrgGraph, findGroup, getGroupMembers, getParent } from "../org/index.js";
 import type { NodeMessage, GatewayMessage, GatewayNode } from "./types.js";
 
 const nodes = new Map<WebSocket, GatewayNode>();
@@ -327,7 +328,7 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
             break;
           }
 
-          // ── 结构化任务消息 ──
+          // ── 结构化任务消息（子组感知路由） ──
           case "task": {
             const taskMsg = {
               type: "task_notify" as const,
@@ -339,11 +340,16 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
               timestamp: new Date().toISOString(),
             };
 
+            // 加载 Org Graph 做子组感知路由
+            const graph = loadOrgGraph();
+            const senderGroup = graph ? findGroup(graph, node.user) : null;
+            const targetGroup = msg.to !== "broadcast" && graph ? findGroup(graph, msg.to) : null;
+            const sameGroup = senderGroup && targetGroup && senderGroup.id === targetGroup.id;
+
             if (msg.to === "broadcast") {
               broadcast(node.roomId, taskMsg);
               events.record(node.roomId, user.id, "task_sent", { taskType: msg.taskType, to: "broadcast" });
             } else {
-              // 单播：找到目标用户
               let delivered = false;
               for (const [targetWs, targetNode] of nodes) {
                 if (targetNode.roomId === node.roomId && targetNode.user === msg.to) {
@@ -353,8 +359,13 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
                 }
               }
               if (delivered) {
-                send(ws, { type: "activity", from: "系统", text: `任务已送达 ${msg.to}`, timestamp: new Date().toISOString() });
-                events.record(node.roomId, user.id, "task_sent", { taskType: msg.taskType, to: msg.to });
+                const groupInfo = sameGroup
+                  ? ` (组内: ${senderGroup!.name})`
+                  : targetGroup
+                  ? ` (跨组: ${senderGroup?.name || "?"} → ${targetGroup.name})`
+                  : "";
+                send(ws, { type: "activity", from: "系统", text: `任务已送达 ${msg.to}${groupInfo}`, timestamp: new Date().toISOString() });
+                events.record(node.roomId, user.id, "task_sent", { taskType: msg.taskType, to: msg.to, sameGroup });
               } else {
                 send(ws, { type: "activity", from: "系统", text: `${msg.to} 当前离线，任务已记录`, timestamp: new Date().toISOString() });
               }
@@ -392,7 +403,7 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
   _server = server;
   server.listen(port, () => {
     console.log("");
-    showBanner("1.0.0", _model?.name || "AI", _model?.provider?.name || "", "Gateway", `:${port}`);
+    showBanner("1.1.0", _model?.name || "AI", _model?.provider?.name || "", "Gateway", `:${port}`);
     const authStatus = _gatewayToken ? "需要 token" : "开放（无 token）";
     console.log(`  HTTP: http://localhost:${port}  |  WS: ws://localhost:${port}/ws`);
     console.log(`  认证: ${authStatus}  |  房间: ${roomMgr.list().length}  |  在线: ${nodes.size}\n`);
