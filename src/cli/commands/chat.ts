@@ -14,7 +14,8 @@ import {
 import type { Model, StreamEvent, ToolUse } from "../../llm/types.js";
 import type { LlmRuntime } from "../../llm/runtime.js";
 import { getDatabase, closeDatabase } from "../../sessions/database.js";
-import { SessionManager, generateTitle, generateSummary } from "../../sessions/manager.js";
+import { SessionManager, generateTitle } from "../../sessions/manager.js";
+import { ContextEngine } from "../../context/engine.js";
 import { UserManager, RoomManager } from "../../identity/manager.js";
 import { MemoryStore } from "../../memory/store.js";
 import { EventStore } from "../../events/store.js";
@@ -105,6 +106,7 @@ export function registerChatCommand(program: Command): void {
       const registry = initProviders();
       const runtime = createLlmRuntime(registry);
       const db = getDatabase();
+      const engine = new ContextEngine(db);
 
       // ---- 身份和房间初始化 ----
       const userMgr = new UserManager(db);
@@ -198,7 +200,7 @@ export function registerChatCommand(program: Command): void {
           try {
             await handleCommand(cmd, arg, {
               sm, runtime, model, memory, events,
-              userMgr, roomMgr, user, room,
+              userMgr, roomMgr, user, room, engine,
               messages, systemPrompt, rl, config,
             });
           } catch (err) {
@@ -222,8 +224,20 @@ export function registerChatCommand(program: Command): void {
         }
 
         try {
+          // ContextEngine 组装：注入项目上下文
+          const assembled = engine.assemble({
+            roomId: room.id, userId: user.id,
+            sessionId: sm.getCurrent()!.id,
+            systemPrompt, messages,
+            maxTokens: Math.floor(model.contextWindow * 0.5),
+          });
+          const finalSystem = assembled.systemPromptAddition
+            ? `${assembled.systemPromptAddition}\n\n---\n\n${systemPrompt}`
+            : systemPrompt;
+
           const stream = runtime.stream({
-            model, messages,
+            model, system: finalSystem,
+            messages: assembled.messages,
             maxTokens: config.maxTokens, temperature: config.temperature,
           });
           process.stdout.write("\nAI: ");
@@ -255,6 +269,7 @@ interface CmdCtx {
   roomMgr: RoomManager;
   user: User;
   room: Room;
+  engine: ContextEngine;
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
   systemPrompt: string;
   rl: readline.Interface;
@@ -263,7 +278,7 @@ interface CmdCtx {
 
 async function handleCommand(cmd: string, arg: string, ctx: CmdCtx) {
   const { sm, runtime, model, memory, events, userMgr, roomMgr, user, room,
-    messages, systemPrompt, rl } = ctx;
+    engine, messages, systemPrompt, rl } = ctx;
 
   switch (cmd) {
     case "/quit": case "/exit":
@@ -329,10 +344,18 @@ async function handleCommand(cmd: string, arg: string, ctx: CmdCtx) {
       try {
         const msgs = sm.getMessages();
         if (msgs.length > 4) {
-          const summary = await generateSummary(runtime, model, msgs);
-          sm.updateSummary(summary);
-          events.record(room.id, user.id, "summary_generated", { sessionId: session.id });
-          console.log(`摘要: ${summary}`);
+          const ctxMsgs = messages.map((m) => ({
+            role: m.role, content: m.content,
+          }));
+          await engine.afterTurn(
+            { roomId: room.id, userId: user.id, sessionId: session.id, messages: ctxMsgs },
+            runtime, model,
+            (summary) => {
+              sm.updateSummary(summary);
+              events.record(room.id, user.id, "summary_generated", { sessionId: session.id });
+              console.log(`摘要: ${summary}`);
+            },
+          );
         }
       } catch { /* ignore */ }
       sm.touch(session.id);

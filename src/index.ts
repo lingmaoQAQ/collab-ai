@@ -67,5 +67,12 @@ export type { MemoryEntry, MemoryCategory } from "./memory/types.js";
 export { EventStore } from "./events/index.js";
 export type { ProjectEvent, EventType } from "./events/index.js";
 
+// Context Engine
+export { ContextEngine } from "./context/index.js";
+export type {
+  AssembleParams, AssembleResult, ContextMessage,
+  CompactParams, CompactResult, AfterTurnParams,
+} from "./context/index.js";
+
 // CLI
 export { createProgram, runCli } from "./cli/index.js";
