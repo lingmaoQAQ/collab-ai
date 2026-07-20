@@ -26,6 +26,7 @@ import {
   aiPrefix, userPrefix,
   bold, modelColor,
 } from "../../ui/index.js";
+import { getToolDefs, executeTool, toolCount } from "../../tools/index.js";
 
 // ---- 工具函数 ----
 
@@ -66,19 +67,31 @@ function showHelp() {
   console.log("");
   showSeparator("命令列表");
   const cmds = [
+    ["── 会话 ──", ""],
     ["/new <title>", "创建新会话"],
-    ["/load <id>", "加载指定会话"],
-    ["/list", "列出我的会话"],
-    ["/save", "保存并生成摘要"],
-    ["/clear", "清除当前对话"],
-    ["/summary", "查看会话摘要"],
-    ["/model <id>", "切换模型"],
-    ["/rooms", "列出项目空间"],
-    ["/members", "查看成员"],
+    ["/load <id>", "加载会话"],
+    ["/list", "列出会话"],
+    ["/save", "保存 & 生成摘要"],
+    ["/clear", "清除对话"],
+    ["── 上下文 ──", ""],
+    ["/context", "查看三级上下文"],
+    ["/context project", "项目上下文"],
+    ["/context user", "用户风格/偏好"],
+    ["── 工具 ──", ""],
+    ["/tools", "列出可用工具"],
+    ["/run <cmd>", "执行命令"],
+    ["/cat <file>", "读取文件"],
+    ["/ls [path]", "列出目录"],
+    ["/search <regex>", "搜索代码"],
+    ["── 协作 ──", ""],
+    ["/rooms", "项目空间"],
+    ["/members", "房间成员"],
     ["/invite <name>", "邀请用户"],
-    ["/events", "查看最近活动"],
+    ["/events", "最近活动"],
     ["/remember <k> <v>", "记录共享记忆"],
     ["/recall <query>", "搜索共享记忆"],
+    ["── 其他 ──", ""],
+    ["/model <id>", "切换模型"],
     ["/help", "显示帮助"],
     ["/quit", "退出"],
   ];
@@ -495,7 +508,88 @@ async function handleCommand(cmd: string, arg: string, ctx: CmdCtx) {
       break;
     }
 
+    // ---- 上下文管理 ----
+    case "/context": {
+      if (!arg || arg === "show") {
+        const s = sm.getCurrent();
+        const cUser = userMgr.get(user.id);
+        const profile = typeof cUser?.profile === "string" ? JSON.parse(cUser.profile as string) : cUser?.profile || {};
+        console.log("");
+        showSeparator("会话上下文");
+        console.log(dim("  会话: ") + (s?.title || "无"));
+        console.log(dim("  消息: ") + (s?.messageCount || 0) + " 条");
+        console.log(dim("  摘要: ") + (s?.summary || "(无)"));
+        showSeparator("用户上下文");
+        console.log(dim("  用户: ") + user.name);
+        console.log(dim("  风格: ") + (profile?.codingStyle || "(学习中)"));
+        showSeparator("项目上下文");
+        console.log(dim("  房间: ") + room.name);
+        console.log(dim("  记忆: ") + memory.list().length + " 条");
+        console.log(dim("  成员: ") + roomMgr.getMembers(room.id).length + " 人");
+        console.log("");
+      } else if (arg === "project") {
+        const mems = memory.list();
+        console.log(info("\n  项目记忆 (" + mems.length + " 条):"));
+        for (const m of mems) {
+          console.log(dim(`  [${m.category}] `) + m.key + dim(": ") + m.value.slice(0, 80));
+        }
+        console.log("");
+      } else if (arg === "user") {
+        const cUser = userMgr.get(user.id);
+        const p = typeof cUser?.profile === "string" ? JSON.parse(cUser.profile as string) : cUser?.profile || {};
+        console.log(info("\n  用户设置:"));
+        console.log(dim("  名称: ") + user.name);
+        console.log(dim("  风格: ") + (p?.codingStyle || "未设置"));
+        console.log(dim("  偏好: ") + JSON.stringify(p?.preferences || {}));
+        console.log("");
+      } else if (arg === "inject") {
+        console.log(info("  上下文将在下一轮对话中自动注入"));
+      } else {
+        console.log(muted("  用法: /context [project|user|session|inject]"));
+      }
+      break;
+    }
+
+    // ---- 工具相关 ----
+    case "/tools": {
+      const defs = getToolDefs();
+      console.log(info(`\n  可用工具 (${defs.length}):`));
+      for (const t of defs) {
+        console.log("  " + bold(t.name) + dim(" — ") + t.description.slice(0, 60));
+      }
+      console.log(muted("\n  提示: AI 会在需要时自动调用这些工具"));
+      console.log("");
+      break;
+    }
+
+    case "/run": {
+      if (!arg) { console.log(error("  用法: /run <命令>")); break; }
+      const result = await executeTool({ id: "cli", name: "run_command", arguments: { command: arg } });
+      console.log(result.isError ? error(result.content) : result.content);
+      break;
+    }
+
+    case "/cat": {
+      if (!arg) { console.log(error("  用法: /cat <文件路径>")); break; }
+      const result = await executeTool({ id: "cli", name: "read_file", arguments: { path: arg } });
+      console.log(result.isError ? error(result.content) : result.content);
+      break;
+    }
+
+    case "/ls": {
+      const result = await executeTool({ id: "cli", name: "list_files", arguments: { path: arg || "." } });
+      console.log(result.content);
+      break;
+    }
+
+    case "/search": {
+      if (!arg) { console.log(error("  用法: /search <正则>")); break; }
+      const result = await executeTool({ id: "cli", name: "search_code", arguments: { pattern: arg } });
+      console.log(result.isError ? error(result.content) : result.content);
+      break;
+    }
+
     default:
-      console.log(`未知命令: ${cmd} (输入 /help 查看帮助)`);
+      console.log(error(`  未知命令: ${cmd} (输入 /help 查看帮助)`));
   }
 }

@@ -78,5 +78,9 @@ export type {
   CompactParams, CompactResult, AfterTurnParams,
 } from "./context/index.js";
 
+// Tools
+export { registerTool, getToolDefs, executeTool, toolCount } from "./tools/index.js";
+export type { ToolDef, ToolCall, ToolResult as ToolExecResult } from "./tools/index.js";
+
 // CLI
 export { createProgram, runCli } from "./cli/index.js";
