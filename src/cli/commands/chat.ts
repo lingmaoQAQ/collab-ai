@@ -15,6 +15,7 @@ import type { LlmRuntime } from "../../llm/runtime.js";
 import { getDatabase, closeDatabase } from "../../sessions/database.js";
 import { SessionManager, generateTitle } from "../../sessions/manager.js";
 import { ContextEngine } from "../../context/engine.js";
+import { compactConversation } from "../../context/compact.js";
 import { Mediator } from "../../mediator/engine.js";
 import { UserManager, RoomManager } from "../../identity/manager.js";
 import { MemoryStore } from "../../memory/store.js";
@@ -76,6 +77,7 @@ function showHelp() {
     ["/list", "列出会话"],
     ["/save", "保存 & 生成摘要"],
     ["/clear", "清除对话"],
+    ["/compact", "压缩上下文（节省token）"],
     ["── 上下文 ──", ""],
     ["/context", "查看三级上下文"],
     ["/context project", "项目上下文"],
@@ -431,6 +433,11 @@ export function registerChatCommand(program: Command): void {
           sm.saveMessage("assistant", text);
           events.record(room.id, user.id, "message_sent", { sessionId: sm.getCurrent()?.id });
 
+          // 长对话提醒压缩
+          if (messages.filter((m) => m.role !== "system").length > 20) {
+            console.log(muted(`  💡 对话较长，建议 /compact 压缩上下文以节省 token`));
+          }
+
           // Mediator 分析：学习用户风格（异步，不阻塞）
           mediator.analyzeTurn(
             { roomId: room.id, userId: user.id, userMessage: input, aiResponse: text },
@@ -553,10 +560,47 @@ async function handleCommand(cmd: string, arg: string, ctx: CmdCtx) {
       break;
     }
 
+    case "/compact": {
+      const nonSystem = messages.filter((m) => m.role !== "system");
+      if (nonSystem.length < 10) {
+        console.log(muted("  消息不足（需要至少10条），无需压缩"));
+        break;
+      }
+      console.log(info(`  正在压缩 ${nonSystem.length} 条消息...`));
+      try {
+        const result = await compactConversation(runtime, model, messages);
+        // 用摘要替换老消息
+        messages.length = 0;
+        messages.push({ role: "system", content: `[对话摘要] ${result.summary}` });
+        // 保留最近消息
+        const keepMsgs = sm.getMessages().slice(-result.keptCount);
+        for (const m of keepMsgs) {
+          messages.push({ role: m.role as "user" | "assistant", content: m.content });
+        }
+        // 清除DB旧消息，重新写入压缩后的
+        sm.clearMessages();
+        sm.saveMessage("system", `[对话摘要] ${result.summary}`);
+        for (const m of keepMsgs) {
+          sm.saveMessage(m.role as "user" | "assistant", m.content);
+        }
+        console.log(info(
+          `  压缩完成: ${result.compactedCount} 条 → 摘要 | ` +
+          `token: ${result.oldTokens} → ${result.newTokens} ` +
+          `(节省 ${Math.round((1 - result.newTokens / result.oldTokens) * 100)}%)`,
+        ));
+        console.log(muted(`  摘要: ${result.summary.slice(0, 100)}...`));
+      } catch (err) {
+        console.log(error(`  压缩失败: ${err instanceof Error ? err.message : err}`));
+      }
+      break;
+    }
+
     case "/clear":
       sm.clearMessages();
       messages.length = 0;
       if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
+      console.log(dim("  对话已清除"));
+      break;
       console.log("对话已清除");
       break;
 
