@@ -1,17 +1,14 @@
-// Chat 命令 v0.3.0 — 多用户协作：Room + User 隔离
+// Chat 命令 v0.5.1 — 多用户协作 + 终端 UI 升级
 
 import { Command } from "commander";
 import * as readline from "node:readline";
 import { loadConfig } from "../../config/index.js";
 import {
-  getDefaultRegistry,
-  createLlmRuntime,
-  createAnthropicProvider,
-  createOpenAIProvider,
-  createOpenAIChatProvider,
+  getDefaultRegistry, createLlmRuntime,
+  createAnthropicProvider, createOpenAIProvider, createOpenAIChatProvider,
   BUILTIN_MODELS,
 } from "../../llm/index.js";
-import type { Model, StreamEvent, ToolUse } from "../../llm/types.js";
+import type { Model } from "../../llm/types.js";
 import type { LlmRuntime } from "../../llm/runtime.js";
 import { getDatabase, closeDatabase } from "../../sessions/database.js";
 import { SessionManager, generateTitle } from "../../sessions/manager.js";
@@ -22,6 +19,13 @@ import { MemoryStore } from "../../memory/store.js";
 import { EventStore } from "../../events/store.js";
 import type { User, Room } from "../../identity/types.js";
 import type { SessionMessage } from "../../sessions/types.js";
+import {
+  showBanner, showWhatsNew, showSeparator,
+  createStreamRenderer,
+  dim, error, info, highlight, muted,
+  aiPrefix, userPrefix,
+  bold, modelColor,
+} from "../../ui/index.js";
 
 // ---- 工具函数 ----
 
@@ -50,20 +54,6 @@ function initProviders() {
   return registry;
 }
 
-async function collectStream(
-  stream: AsyncIterable<StreamEvent>,
-  onText?: (t: string) => void,
-): Promise<{ text: string; toolUses: ToolUse[] }> {
-  let text = "";
-  const toolUses: ToolUse[] = [];
-  for await (const event of stream) {
-    if (event.type === "text_delta") { text += event.text; if (onText) onText(event.text); }
-    else if (event.type === "tool_use") toolUses.push(event.tool);
-    else if (event.type === "error") throw new Error(event.error);
-  }
-  return { text, toolUses };
-}
-
 function sessionInfo(sm: SessionManager): string {
   const s = sm.getCurrent();
   if (!s) return "无活跃会话";
@@ -71,23 +61,29 @@ function sessionInfo(sm: SessionManager): string {
 }
 
 function showHelp() {
-  console.log(`
-  /new <title>     创建新会话
-  /load <id>       加载指定会话
-  /list            列出我的会话
-  /save            保存并生成摘要
-  /clear           清除当前对话
-  /summary         查看会话摘要
-  /model <id>      切换模型
-  /rooms           列出项目空间
-  /members         查看当前房间成员
-  /invite <name>   邀请用户到房间
-  /events          查看最近活动
-  /remember <k> <v> 记录共享记忆
-  /recall <query>  搜索共享记忆
-  /help            显示帮助
-  /quit, /exit     退出
-`);
+  console.log("");
+  showSeparator("命令列表");
+  const cmds = [
+    ["/new <title>", "创建新会话"],
+    ["/load <id>", "加载指定会话"],
+    ["/list", "列出我的会话"],
+    ["/save", "保存并生成摘要"],
+    ["/clear", "清除当前对话"],
+    ["/summary", "查看会话摘要"],
+    ["/model <id>", "切换模型"],
+    ["/rooms", "列出项目空间"],
+    ["/members", "查看成员"],
+    ["/invite <name>", "邀请用户"],
+    ["/events", "查看最近活动"],
+    ["/remember <k> <v>", "记录共享记忆"],
+    ["/recall <query>", "搜索共享记忆"],
+    ["/help", "显示帮助"],
+    ["/quit", "退出"],
+  ];
+  for (const [cmd, desc] of cmds) {
+    console.log(dim("  ") + bold(cmd.padEnd(20)) + dim(desc));
+  }
+  console.log("");
 }
 
 // ---- 主命令 ----
@@ -156,30 +152,20 @@ export function registerChatCommand(program: Command): void {
       if (latest) {
         const ctx = sm.loadSession(latest.id);
         if (ctx) {
-          console.log(`CollabAI v0.3.0 | ${room.name} | ${user.name}`);
-          console.log(`已恢复: ${sessionInfo(sm)}\n`);
+          showBanner("0.5.1", model.name, model.provider.name, room.name, user.name);
+          console.log(dim("  ") + muted("已恢复: ") + sessionInfo(sm) + "\n");
         }
       }
       if (!sm.getCurrent()) {
         sm.startSession("新对话", model.id, systemPrompt);
         events.record(room.id, user.id, "session_started", {});
-        console.log(`CollabAI v0.3.0 | ${room.name} | ${user.name}`);
-        console.log(`新会话已创建\n`);
+        showBanner("0.5.1", model.name, model.provider.name, room.name, user.name);
       }
 
       // 显示自上次以来的变化
       try {
         const wn = mediator.whatsNew(room.id, user.id);
-        if (wn.newEvents.length || wn.activeUsers.length) {
-          console.log("自上次活动以来:");
-          for (const u of wn.activeUsers) {
-            console.log(`  - ${u.userName} 正在处理 [${u.currentTopic}]`);
-          }
-          for (const k of wn.newMemories) {
-            console.log(`  - 新增记录: ${k}`);
-          }
-          console.log("");
-        }
+        showWhatsNew(wn.activeUsers, wn.newMemories);
       } catch { /* 静默降级 */ }
 
       // 构建内存消息列表
@@ -272,20 +258,34 @@ export function registerChatCommand(program: Command): void {
             messages: assembled.messages,
             maxTokens: config.maxTokens, temperature: config.temperature,
           });
-          process.stdout.write("\nAI: ");
-          const { text } = await collectStream(stream, (t) => process.stdout.write(t));
-          process.stdout.write("\n");
+
+          // 使用 StreamRenderer 实现无闪烁流式输出
+          const renderer = createStreamRenderer();
+          let text = "";
+          for await (const event of stream) {
+            if (event.type === "text_delta") {
+              text += event.text;
+              renderer.write(event.text);
+            } else if (event.type === "error") {
+              throw new Error(event.error);
+            }
+          }
+          if (!renderer.hasOutput() && text) {
+            process.stdout.write(aiPrefix() + text + "\n");
+          }
+          renderer.done();
+
           messages.push({ role: "assistant", content: text });
           sm.saveMessage("assistant", text);
           events.record(room.id, user.id, "message_sent", { sessionId: sm.getCurrent()?.id });
 
-          // Mediator 分析：学习用户风格
+          // Mediator 分析：学习用户风格（异步，不阻塞）
           mediator.analyzeTurn(
             { roomId: room.id, userId: user.id, userMessage: input, aiResponse: text },
             runtime, model,
-          ).catch(() => {}); // 异步，不阻塞
+          ).catch(() => {});
         } catch (err) {
-          console.error(`\nError: ${err instanceof Error ? err.message : err}`);
+          console.error(error(`\n  Error: ${err instanceof Error ? err.message : err}`));
           messages.pop();
         }
         rl.prompt();
