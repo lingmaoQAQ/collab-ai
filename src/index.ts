@@ -82,5 +82,9 @@ export type {
 export { registerTool, getToolDefs, executeTool, toolCount } from "./tools/index.js";
 export type { ToolDef, ToolCall, ToolResult as ToolExecResult } from "./tools/index.js";
 
+// Gateway
+export { startGateway, GatewayClient } from "./gateway/index.js";
+export type { NodeMessage, GatewayMessage, MessageHandler } from "./gateway/index.js";
+
 // CLI
 export { createProgram, runCli } from "./cli/index.js";
