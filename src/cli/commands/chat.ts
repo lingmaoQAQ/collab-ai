@@ -42,7 +42,9 @@ function initProviders() {
   const chatApiKey = process.env.OPENAI_CHAT_API_KEY ||
     process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY;
   const chatBaseUrl = process.env.OPENAI_CHAT_BASE_URL ||
-    process.env.DEEPSEEK_BASE_URL || process.env.OPENAI_BASE_URL;
+    process.env.DEEPSEEK_BASE_URL || process.env.OPENAI_BASE_URL ||
+    // 自动检测：DeepSeek key 但没有配 base URL 时，自动用 DeepSeek 地址
+    (process.env.DEEPSEEK_API_KEY ? "https://api.deepseek.com/v1" : undefined);
   if (chatApiKey || chatBaseUrl) {
     registry.register(createOpenAIChatProvider({
       apiKey: chatApiKey || "ollama", baseURL: chatBaseUrl, api: "openai-chat",
