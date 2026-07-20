@@ -1,0 +1,31 @@
+{
+  "name": "collab-ai",
+  "version": "0.1.0",
+  "description": "AI 多用户协作框架 — AI 作为团队技术协作者",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "collab-ai": "cli.mjs"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "node --import tsx cli.mjs",
+    "start": "node cli.mjs",
+    "chat": "node cli.mjs chat",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.109.1",
+    "commander": "^15.0.0",
+    "dotenv": "^17.4.2",
+    "openai": "^6.45.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}
