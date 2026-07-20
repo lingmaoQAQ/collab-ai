@@ -34,22 +34,25 @@ pnpm build
 pnpm test
 ```
 
-## 项目架构（规划）
+## 项目架构
 
 ```
 collab-ai/
 ├── src/
-│   ├── gateway/          # 网关层 — 多用户入口路由
-│   ├── sessions/         # 会话层 — 用户上下文隔离
-│   ├── context/          # 上下文引擎 — 长短期记忆管理
-│   ├── agents/           # Agent 层 — AI Agent 生命周期
-│   ├── workspace/        # 工作区层 — 文件隔离与合并
-│   ├── project/          # 项目大脑 — 全局认知维护
-│   ├── style/            # 风格引擎 — 开发者风格学习
-│   ├── channels/         # 通道层 — Slack/钉钉/Webhook
-│   ├── merge/            # 合并引擎 — 语义冲突检测与解决
-│   └── plugin-sdk/       # 插件 SDK — 扩展接口
-├── packages/             # 可复用包
+│   ├── llm/             # ✅ LLM 抽象层 — types / registry / runtime
+│   │   └── providers/   # ✅ Anthropic + OpenAI + Chat Completions
+│   ├── config/          # ✅ 配置系统 — 环境变量 + JSON
+│   ├── sessions/        # ✅ 会话层 — SQLite 存储 + Manager
+│   ├── memory/          # ✅ 记忆系统 — 跨会话知识存储
+│   ├── cli/             # ✅ CLI — Commander + 交互式 chat
+│   ├── gateway/         # 🔲 网关层 — 多用户入口路由
+│   ├── agents/          # 🔲 Agent 层 — AI Agent 生命周期
+│   ├── workspace/       # 🔲 工作区层 — 文件隔离与合并
+│   ├── project/         # 🔲 项目大脑 — 全局认知维护
+│   ├── style/           # 🔲 风格引擎 — 开发者风格学习
+│   ├── channels/        # 🔲 通道层 — Slack/钉钉/Webhook
+│   └── merge/           # 🔲 合并引擎 — 语义冲突检测与解决
+├── packages/            # 🔲 可复用包
 ├── docs/                 # 文档
 ├── test/                 # 测试
 └── skills/               # AI 技能定义
