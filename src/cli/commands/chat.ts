@@ -271,14 +271,14 @@ export function registerChatCommand(program: Command): void {
       if (latest) {
         const ctx = sm.loadSession(latest.id);
         if (ctx) {
-          showBanner("0.5.1", model.name, model.provider.name, room.name, user.name);
+          showBanner("1.0.0", model.name, model.provider.name, room.name, user.name);
           console.log(dim("  ") + muted("已恢复: ") + sessionInfo(sm) + "\n");
         }
       }
       if (!sm.getCurrent()) {
         sm.startSession("新对话", model.id, systemPrompt);
         events.record(room.id, user.id, "session_started", {});
-        showBanner("0.5.1", model.name, model.provider.name, room.name, user.name);
+        showBanner("1.0.0", model.name, model.provider.name, room.name, user.name);
       }
 
       // 显示自上次以来的变化

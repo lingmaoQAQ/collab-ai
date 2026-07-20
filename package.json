@@ -1,6 +1,6 @@
 {
   "name": "collab-ai",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "AI 多用户协作框架 — AI 作为团队技术协作者",
   "type": "module",
   "main": "dist/index.js",

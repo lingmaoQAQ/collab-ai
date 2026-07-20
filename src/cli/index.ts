@@ -10,7 +10,7 @@ export function createProgram(): Command {
   program
     .name("collab-ai")
     .description("AI 多用户协作框架 — 让 AI 成为团队的技术协作者")
-    .version("0.7.0");
+    .version("1.0.0");
 
   registerChatCommand(program);
   registerGatewayCommand(program);

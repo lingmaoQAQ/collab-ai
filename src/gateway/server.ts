@@ -341,7 +341,7 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
   _server = server;
   server.listen(port, () => {
     console.log("");
-    showBanner("0.8.0", _model?.name || "AI", _model?.provider?.name || "", "Gateway", `:${port}`);
+    showBanner("1.0.0", _model?.name || "AI", _model?.provider?.name || "", "Gateway", `:${port}`);
     const authStatus = _gatewayToken ? "需要 token" : "开放（无 token）";
     console.log(`  HTTP: http://localhost:${port}  |  WS: ws://localhost:${port}/ws`);
     console.log(`  认证: ${authStatus}  |  房间: ${roomMgr.list().length}  |  在线: ${nodes.size}\n`);
