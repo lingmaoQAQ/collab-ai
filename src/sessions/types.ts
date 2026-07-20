@@ -1,19 +1,21 @@
-// 会话和消息类型定义
+// 会话类型定义 v0.3.0 — 多用户版本
 
-export interface Session {
+export interface UserSession {
   id: string;
-  title: string;
+  roomId: string;
+  userId: string;
   modelId: string;
-  createdAt: string;    // ISO 8601
+  title: string;
+  createdAt: string;
   updatedAt: string;
   messageCount: number;
-  summary: string | null;  // 对话摘要（LLM 生成）
+  summary: string | null;
 }
 
-export interface Message {
+export interface SessionMessage {
   id?: number;
   sessionId: string;
-  role: "system" | "user" | "assistant";
+  role: "system" | "user" | "assistant" | "mediator";
   content: string;
   createdAt?: string;
 }
@@ -23,5 +25,5 @@ export interface SessionSummary {
   title: string;
   messageCount: number;
   updatedAt: string;
-  preview: string;  // 最后一条用户消息的截断
+  preview: string;
 }

@@ -2,7 +2,6 @@
 
 // LLM 层
 export {
-  // Types
   type Model,
   type ModelProvider,
   type Message,
@@ -34,10 +33,21 @@ export { createLlmRuntime, type LlmRuntime } from "./llm/index.js";
 export {
   createAnthropicProvider,
   createOpenAIProvider,
+  createOpenAIChatProvider,
+  type OpenAIChatProviderOptions,
 } from "./llm/index.js";
 
 // Config
-export { loadConfig, getApiKey, DEFAULT_CONFIG, type CollabAIConfig } from "./config/index.js";
+export {
+  loadConfig,
+  getApiKey,
+  DEFAULT_CONFIG,
+  type CollabAIConfig,
+} from "./config/index.js";
+
+// Identity
+export { UserManager, RoomManager } from "./identity/index.js";
+export type { User, UserProfile, Room, RoomMember, RoomRole } from "./identity/index.js";
 
 // Sessions
 export {
@@ -47,11 +57,15 @@ export {
 } from "./sessions/manager.js";
 export { SessionStore } from "./sessions/store.js";
 export { getDatabase, closeDatabase } from "./sessions/database.js";
-export type { Session, Message as SessionMessage, SessionSummary } from "./sessions/types.js";
+export type { UserSession, SessionMessage, SessionSummary } from "./sessions/types.js";
 
 // Memory
 export { MemoryStore } from "./memory/store.js";
-export type { MemoryEntry } from "./memory/types.js";
+export type { MemoryEntry, MemoryCategory } from "./memory/types.js";
+
+// Events
+export { EventStore } from "./events/index.js";
+export type { ProjectEvent, EventType } from "./events/index.js";
 
 // CLI
 export { createProgram, runCli } from "./cli/index.js";
