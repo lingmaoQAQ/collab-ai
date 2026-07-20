@@ -19,6 +19,7 @@ export type GatewayMessage =
   | { type: "left"; user: string }
   | { type: "memory_update"; key: string; value: string }
   | { type: "recall_result"; query: string; results: string }
+  | { type: "tool_call"; callId: string; tool: string; args: Record<string, string> }
   | { type: "error"; message: string };
 
 export interface GatewayNode {

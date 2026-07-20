@@ -216,17 +216,60 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
               ? ctxParts.join("\n\n") + "\n\n---\n\n你是 CollabAI 项目的 AI 技术协作者。用中文简洁回答。"
               : "你是 CollabAI 项目的 AI 技术协作者。用中文简洁回答。";
 
-            // 7. LLM 调用
+            // 7. LLM 调用（支持工具转发）
             let responseText = "";
+            let toolCallsMade = 0;
             try {
-              const stream = _runtime.stream({
+              const { runToolLoop } = await import("../tools/loop.js");
+              const result = await runToolLoop({
+                runtime: _runtime,
                 model: _model,
                 system: finalSystem,
-                messages: assembled.messages,
-                maxTokens: 500, temperature: 0.7,
+                messages: assembled.messages
+                  .filter((m: any) => m.role !== "system")
+                  .map((m: any) => ({ role: m.role as "user" | "assistant", content: m.content })),
+                maxToolRounds: 3,
+                maxTokens: 500,
+                temperature: 0.7,
+                onToolUse: (tc) => {
+                  toolCallsMade++;
+                  broadcast(node.roomId, {
+                    type: "activity",
+                    from: "系统",
+                    text: `${node.user} 的 AI 正在执行: ${tc.name}`,
+                    timestamp: new Date().toISOString(),
+                  }, ws);
+                },
+                remoteExecute: async (tc) => {
+                  // 转发工具调用到用户节点执行
+                  return new Promise((resolve) => {
+                    const timeout = setTimeout(() => {
+                      resolve({ callId: tc.id, content: "工具执行超时", isError: true });
+                    }, 30000);
+
+                    const handler = (raw: any) => {
+                      try {
+                        const msg = JSON.parse(raw.toString());
+                        if (msg.type === "tool_result" && msg.callId === tc.id) {
+                          clearTimeout(timeout);
+                          ws.removeListener("message", handler);
+                          resolve({ callId: tc.id, content: msg.result, isError: msg.isError });
+                        }
+                      } catch { /* ignore */ }
+                    };
+                    ws.on("message", handler);
+                    send(ws, {
+                      type: "tool_call",
+                      callId: tc.id,
+                      tool: tc.name,
+                      args: tc.arguments,
+                    });
+                  });
+                },
               });
-              for await (const event of stream) {
-                if (event.type === "text_delta") responseText += event.text;
+              responseText = result.finalText || "(无回复)";
+              if (toolCallsMade > 0) {
+                responseText += `\n(已执行 ${toolCallsMade} 个工具)`;
               }
             } catch (err: any) {
               responseText = `[AI 错误: ${err.message}]`;

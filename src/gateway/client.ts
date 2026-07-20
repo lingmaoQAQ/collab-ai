@@ -1,7 +1,9 @@
 // Gateway Client — Node 端 WebSocket 客户端
-// 连接 Gateway，收发消息，同步状态
+// 连接 Gateway，收发消息，同步状态，执行远程工具
 
 import WebSocket from "ws";
+import "../tools/index.js"; // 注册内置工具
+import { executeTool } from "../tools/registry.js";
 import type { NodeMessage, GatewayMessage } from "./types.js";
 
 export type MessageHandler = (msg: GatewayMessage) => void;
@@ -30,9 +32,26 @@ export class GatewayClient {
         resolve();
       });
 
-      this.ws.on("message", (raw) => {
+      this.ws.on("message", async (raw) => {
         try {
           const msg: GatewayMessage = JSON.parse(raw.toString());
+
+          // 远程工具执行：Gateway 请求本地执行
+          if (msg.type === "tool_call") {
+            const result = await executeTool({
+              id: msg.callId,
+              name: msg.tool,
+              arguments: msg.args,
+            });
+            this.ws!.send(JSON.stringify({
+              type: "tool_result",
+              callId: msg.callId,
+              result: result.content,
+              isError: result.isError,
+            }));
+            return;
+          }
+
           this.emit(msg.type, msg);
           this.emit("*", msg);
         } catch { /* 忽略解析失败 */ }

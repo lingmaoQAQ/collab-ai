@@ -10,11 +10,13 @@ export interface ToolLoopOptions {
   model: Model;
   system: string;
   messages: Array<{ role: "user" | "assistant"; content: string }>;
-  maxToolRounds?: number;  // 最大工具调用轮次，防无限循环
+  maxToolRounds?: number;
   maxTokens?: number;
   temperature?: number;
-  onText?: (text: string) => void;  // 流式文本回调
-  onToolUse?: (tool: ToolCall) => void;  // 工具调用通知
+  onText?: (text: string) => void;
+  onToolUse?: (tool: ToolCall) => void;
+  /** 远程工具执行（Gateway 模式）。不传则本地执行。 */
+  remoteExecute?: (tool: ToolCall) => Promise<ToolResult>;
 }
 
 export interface ToolLoopResult {
@@ -130,7 +132,9 @@ export async function runToolLoop(opts: ToolLoopOptions): Promise<ToolLoopResult
 
     // 执行每个工具并添加结果
     for (const tc of currentToolCalls) {
-      const result = await executeTool(tc);
+      const result = opts.remoteExecute
+        ? await opts.remoteExecute(tc)
+        : await executeTool(tc);
 
       // 工具结果消息（OpenAI格式）
       fullMessages.push({
