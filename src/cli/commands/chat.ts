@@ -16,6 +16,7 @@ import type { LlmRuntime } from "../../llm/runtime.js";
 import { getDatabase, closeDatabase } from "../../sessions/database.js";
 import { SessionManager, generateTitle } from "../../sessions/manager.js";
 import { ContextEngine } from "../../context/engine.js";
+import { Mediator } from "../../mediator/engine.js";
 import { UserManager, RoomManager } from "../../identity/manager.js";
 import { MemoryStore } from "../../memory/store.js";
 import { EventStore } from "../../events/store.js";
@@ -107,6 +108,7 @@ export function registerChatCommand(program: Command): void {
       const runtime = createLlmRuntime(registry);
       const db = getDatabase();
       const engine = new ContextEngine(db);
+      const mediator = new Mediator(db);
 
       // ---- 身份和房间初始化 ----
       const userMgr = new UserManager(db);
@@ -164,6 +166,21 @@ export function registerChatCommand(program: Command): void {
         console.log(`CollabAI v0.3.0 | ${room.name} | ${user.name}`);
         console.log(`新会话已创建\n`);
       }
+
+      // 显示自上次以来的变化
+      try {
+        const wn = mediator.whatsNew(room.id, user.id);
+        if (wn.newEvents.length || wn.activeUsers.length) {
+          console.log("自上次活动以来:");
+          for (const u of wn.activeUsers) {
+            console.log(`  - ${u.userName} 正在处理 [${u.currentTopic}]`);
+          }
+          for (const k of wn.newMemories) {
+            console.log(`  - 新增记录: ${k}`);
+          }
+          console.log("");
+        }
+      } catch { /* 静默降级 */ }
 
       // 构建内存消息列表
       const dbMessages = sm.getMessages();
@@ -231,8 +248,23 @@ export function registerChatCommand(program: Command): void {
             systemPrompt, messages,
             maxTokens: Math.floor(model.contextWindow * 0.5),
           });
-          const finalSystem = assembled.systemPromptAddition
-            ? `${assembled.systemPromptAddition}\n\n---\n\n${systemPrompt}`
+
+          // Mediator 增强：注入跨用户感知
+          let crossUserAddition = "";
+          try {
+            const enhanced = await mediator.enhanceContext({
+              roomId: room.id, userId: user.id,
+              projectContext: assembled.systemPromptAddition || "",
+            }, runtime, model);
+            if (enhanced.addition) crossUserAddition = enhanced.addition;
+          } catch { /* 静默降级 */ }
+
+          const ctxAdditions = [
+            assembled.systemPromptAddition,
+            crossUserAddition,
+          ].filter(Boolean).join("\n\n");
+          const finalSystem = ctxAdditions
+            ? `${ctxAdditions}\n\n---\n\n${systemPrompt}`
             : systemPrompt;
 
           const stream = runtime.stream({
@@ -246,6 +278,12 @@ export function registerChatCommand(program: Command): void {
           messages.push({ role: "assistant", content: text });
           sm.saveMessage("assistant", text);
           events.record(room.id, user.id, "message_sent", { sessionId: sm.getCurrent()?.id });
+
+          // Mediator 分析：学习用户风格
+          mediator.analyzeTurn(
+            { roomId: room.id, userId: user.id, userMessage: input, aiResponse: text },
+            runtime, model,
+          ).catch(() => {}); // 异步，不阻塞
         } catch (err) {
           console.error(`\nError: ${err instanceof Error ? err.message : err}`);
           messages.pop();

@@ -67,6 +67,10 @@ export type { MemoryEntry, MemoryCategory } from "./memory/types.js";
 export { EventStore } from "./events/index.js";
 export type { ProjectEvent, EventType } from "./events/index.js";
 
+// Mediator
+export { Mediator } from "./mediator/index.js";
+export type { WhatsNewResult, EnhanceResult, EnhanceParams } from "./mediator/index.js";
+
 // Context Engine
 export { ContextEngine } from "./context/index.js";
 export type {
