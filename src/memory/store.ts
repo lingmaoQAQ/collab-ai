@@ -50,14 +50,47 @@ export class MemoryStore {
     return this.db.prepare(sql).all(...params) as MemoryEntry[];
   }
 
+  /** 智能搜索：分词匹配 + 关键词权重排序 */
   search(query: string, limit = 10): MemoryEntry[] {
+    // 提取关键词
+    const keywords = query
+      .split(/[\s,，。、；：！？]+/)
+      .filter((k) => k.length > 0);
+
+    if (keywords.length <= 1) {
+      // 单关键词：用 LIKE
+      return this.db.prepare(`
+        SELECT id, room_id AS roomId, key, value, category,
+               author_id AS authorId, created_at AS createdAt, updated_at AS updatedAt
+        FROM project_memories
+        WHERE room_id = ? AND (key LIKE ? OR value LIKE ?)
+        ORDER BY updated_at DESC LIMIT ?
+      `).all(this.roomId, `%${query}%`, `%${query}%`, limit) as MemoryEntry[];
+    }
+
+    // 多关键词：构建动态评分查询
+    // 注意：SQL中?的顺序是 scoring(先) → room_id → WHERE → LIMIT
+    const likeClauses = keywords.map(() => `(key LIKE ? OR value LIKE ?)`).join(" OR ");
+    const scoringParts = keywords.map(() => `(CASE WHEN key LIKE ? THEN 3 WHEN value LIKE ? THEN 1 ELSE 0 END)`).join(" + ");
+
+    const params: (string | number)[] = [];
+    // 1. 先填 scoring 参数（SELECT 中先出现）
+    for (const kw of keywords) params.push(`%${kw}%`, `%${kw}%`);
+    // 2. room_id
+    params.push(this.roomId);
+    // 3. WHERE 参数
+    for (const kw of keywords) params.push(`%${kw}%`, `%${kw}%`);
+    // 4. LIMIT
+    params.push(limit);
+
     return this.db.prepare(`
       SELECT id, room_id AS roomId, key, value, category,
-             author_id AS authorId, created_at AS createdAt, updated_at AS updatedAt
+             author_id AS authorId, created_at AS createdAt, updated_at AS updatedAt,
+             (${scoringParts}) AS score
       FROM project_memories
-      WHERE room_id = ? AND (key LIKE ? OR value LIKE ?)
-      ORDER BY updated_at DESC LIMIT ?
-    `).all(this.roomId, `%${query}%`, `%${query}%`, limit) as MemoryEntry[];
+      WHERE room_id = ? AND (${likeClauses})
+      ORDER BY score DESC, updated_at DESC LIMIT ?
+    `).all(...params) as MemoryEntry[];
   }
 
   delete(key: string): void {

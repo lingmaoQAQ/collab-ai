@@ -19,6 +19,7 @@ import { ContextEngine } from "../../context/engine.js";
 import { compactConversation } from "../../context/compact.js";
 import { UsageTracker, estimateTokens } from "../../utils/usage.js";
 import { loadOrgGraph, describeOrg, findNode, findBySkill, findGroup, getGroupMembers, getSiblings } from "../../org/index.js";
+import { loadPlugins, getLoadedPlugins } from "../../plugins/index.js";
 import { Mediator } from "../../mediator/engine.js";
 import { UserManager, RoomManager } from "../../identity/manager.js";
 import { MemoryStore } from "../../memory/store.js";
@@ -253,6 +254,13 @@ export function registerChatCommand(program: Command): void {
       const engine = new ContextEngine(db);
       const mediator = new Mediator(db);
       const usage = new UsageTracker();
+
+      // 加载插件
+      const pluginsDir = resolve(process.cwd(), "plugins");
+      if (existsSync(pluginsDir)) {
+        const loaded = await loadPlugins(pluginsDir);
+        if (loaded.length) console.log(dim("  ") + info(`插件: ${loaded.length} 个已加载`));
+      }
 
       // 加载 Org Graph
       const orgGraph = loadOrgGraph(options.workspace);
@@ -1042,6 +1050,17 @@ async function handleCommand(cmd: string, arg: string, ctx: CmdCtx) {
     }
 
     // ---- 工具相关 ----
+    case "/plugins": {
+      const plugins = getLoadedPlugins();
+      if (!plugins.length) { console.log(muted("  暂无插件。将 .ts 文件放入 plugins/ 目录自动加载。")); break; }
+      console.log(info(`\n  已加载插件 (${plugins.length}):`));
+      for (const p of plugins) {
+        console.log("  " + bold(p.name) + dim(" — ") + p.description);
+      }
+      console.log("");
+      break;
+    }
+
     case "/tools": {
       const defs = getToolDefs();
       console.log(info(`\n  可用工具 (${defs.length}):`));
