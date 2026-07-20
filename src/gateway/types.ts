@@ -5,6 +5,8 @@ import type { WebSocket } from "ws";
 export type NodeMessage =
   | { type: "hello"; roomId: string; user: string; workspace: string }
   | { type: "chat"; text: string }
+  | { type: "task"; taskType: string; to: string; payload: Record<string, unknown>; priority?: string }
+  | { type: "task_reply"; replyTo: string; text: string; accepted: boolean }
   | { type: "remember"; key: string; value: string; category?: string }
   | { type: "recall"; query: string }
   | { type: "tool_result"; callId: string; result: string; isError?: boolean };
@@ -19,6 +21,8 @@ export type GatewayMessage =
   | { type: "left"; user: string }
   | { type: "memory_update"; key: string; value: string }
   | { type: "recall_result"; query: string; results: string }
+  | { type: "task_notify"; taskType: string; from: string; payload: Record<string, unknown>; priority: string; messageId: string; timestamp: string }
+  | { type: "task_reply"; replyTo: string; from: string; text: string; accepted: boolean }
   | { type: "tool_call"; callId: string; tool: string; args: Record<string, string> }
   | { type: "error"; message: string };
 

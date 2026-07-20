@@ -326,6 +326,57 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
             send(ws, { type: "recall_result", query: msg.query, results: text || "未找到" });
             break;
           }
+
+          // ── 结构化任务消息 ──
+          case "task": {
+            const taskMsg = {
+              type: "task_notify" as const,
+              taskType: msg.taskType,
+              from: node.user,
+              payload: msg.payload,
+              priority: msg.priority || "normal",
+              messageId: "task_" + Date.now(),
+              timestamp: new Date().toISOString(),
+            };
+
+            if (msg.to === "broadcast") {
+              broadcast(node.roomId, taskMsg);
+              events.record(node.roomId, user.id, "task_sent", { taskType: msg.taskType, to: "broadcast" });
+            } else {
+              // 单播：找到目标用户
+              let delivered = false;
+              for (const [targetWs, targetNode] of nodes) {
+                if (targetNode.roomId === node.roomId && targetNode.user === msg.to) {
+                  send(targetWs, taskMsg);
+                  delivered = true;
+                  break;
+                }
+              }
+              if (delivered) {
+                send(ws, { type: "activity", from: "系统", text: `任务已送达 ${msg.to}`, timestamp: new Date().toISOString() });
+                events.record(node.roomId, user.id, "task_sent", { taskType: msg.taskType, to: msg.to });
+              } else {
+                send(ws, { type: "activity", from: "系统", text: `${msg.to} 当前离线，任务已记录`, timestamp: new Date().toISOString() });
+              }
+            }
+            break;
+          }
+          case "task_reply": {
+            // 转发回复
+            for (const [targetWs, targetNode] of nodes) {
+              if (targetNode.roomId === node.roomId && targetNode.user === msg.replyTo) {
+                send(targetWs, {
+                  type: "task_reply",
+                  replyTo: msg.replyTo,
+                  from: node.user,
+                  text: msg.text,
+                  accepted: msg.accepted,
+                });
+                break;
+              }
+            }
+            break;
+          }
         }
       } catch (err) {
         send(ws, { type: "error", message: "消息处理失败" });

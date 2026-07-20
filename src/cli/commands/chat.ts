@@ -17,6 +17,7 @@ import { SessionManager, generateTitle } from "../../sessions/manager.js";
 import { ContextEngine } from "../../context/engine.js";
 import { compactConversation } from "../../context/compact.js";
 import { UsageTracker, estimateTokens } from "../../utils/usage.js";
+import { loadOrgGraph, describeOrg, findNode, findBySkill } from "../../org/index.js";
 import { Mediator } from "../../mediator/engine.js";
 import { UserManager, RoomManager } from "../../identity/manager.js";
 import { MemoryStore } from "../../memory/store.js";
@@ -126,6 +127,7 @@ export function registerChatCommand(program: Command): void {
       if (options.connect) {
         const { GatewayClient } = await import("../../gateway/client.js");
         const client = new GatewayClient();
+        (globalThis as any)._gatewayClient = client; // 供 /task 命令使用
         const wsUrl = options.connect;
         const roomId = options.room || "default";
         const userName = options.user || "developer";
@@ -172,6 +174,28 @@ export function registerChatCommand(program: Command): void {
         });
         client.on("left", (msg) => {
           if (msg.type === "left") console.log(muted(`  ← ${msg.user} 下线了`));
+        });
+        // 接收结构化任务通知
+        client.on("task_notify", (msg) => {
+          if (msg.type !== "task_notify") return;
+          console.log("");
+          showSeparator("任务通知");
+          console.log(
+            highlight(`  [${msg.taskType}] `) +
+            bold(msg.from) + dim(" → ") +
+            JSON.stringify(msg.payload).slice(0, 100),
+          );
+          console.log(dim(`  ID: ${msg.messageId} | 优先级: ${msg.priority}`));
+          console.log("");
+        });
+        // 接收任务回复
+        client.on("task_reply", (msg) => {
+          if (msg.type !== "task_reply") return;
+          console.log(
+            info(`\n  任务回复: `) +
+            bold(msg.from) + dim(": ") +
+            (msg.accepted ? "已接受" : "已拒绝") + " — " + msg.text,
+          );
         });
         client.on("error", (msg) => {
           if (msg.type === "error") console.log(error(`  Gateway: ${msg.message}`));
@@ -228,6 +252,12 @@ export function registerChatCommand(program: Command): void {
       const engine = new ContextEngine(db);
       const mediator = new Mediator(db);
       const usage = new UsageTracker();
+
+      // 加载 Org Graph
+      const orgGraph = loadOrgGraph(options.workspace);
+      if (orgGraph) {
+        console.log(dim("  ") + info("组织拓扑已加载: ") + orgGraph.nodes.length + " 个节点");
+      }
 
       // ---- 身份和房间初始化 ----
       const userMgr = new UserManager(db);
@@ -663,6 +693,48 @@ async function handleCommand(cmd: string, arg: string, ctx: CmdCtx) {
     }
 
     // ---- 任务追踪 ----
+    // ---- 组织拓扑 ----
+    case "/org": {
+      const graph = loadOrgGraph();
+      if (!graph) { console.log(muted("  未找到 .collab-ai/org-graph.yml")); break; }
+      console.log(info("\n  组织拓扑:"));
+      console.log(describeOrg(graph, user.id).split("\n").map((l) => dim("  ") + l).join("\n"));
+      console.log("");
+      break;
+    }
+
+    // ---- 结构化任务 ----
+    case "/task": {
+      const parts2 = arg.split(" ");
+      const sub = parts2[0];
+      const rest = parts2.slice(1).join(" ");
+
+      if (sub === "send" || sub === "notify") {
+        const [to, ...msgParts] = rest.split(" ");
+        if (!to || !msgParts.length) { console.log(muted("  用法: /task send <用户> <消息>")); break; }
+        const graph = loadOrgGraph();
+        const target = findNode(graph!, to);
+        if (!target) { console.log(error(`  节点 ${to} 不在组织拓扑中`)); break; }
+
+        const client = (globalThis as any)._gatewayClient;
+        if (client) {
+          client.send({ type: "task", taskType: "coordination", to, payload: { text: msgParts.join(" ") }, priority: "normal" });
+        }
+        console.log(info(`  任务已发送: ${to} ← ${msgParts.join(" ")}`));
+      } else if (sub === "skills" || sub === "find") {
+        const graph = loadOrgGraph();
+        const matches = findBySkill(graph!, rest);
+        console.log(info(`\n  匹配 "${rest}" 的节点:`));
+        for (const m of matches) {
+          console.log(dim("  ") + m.name + dim(" (") + m.id + dim(") 技能: ") + (m.skills || []).join(", "));
+        }
+        console.log("");
+      } else {
+        console.log(muted("  /task send <用户> <消息>  |  /task skills <技能>"));
+      }
+      break;
+    }
+
     case "/todo": {
       const todoKey = "_todo_" + user.id;
       if (!arg || arg === "list") {

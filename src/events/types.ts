@@ -8,7 +8,9 @@ export type EventType =
   | "message_sent"
   | "memory_added"
   | "memory_updated"
-  | "summary_generated";
+  | "summary_generated"
+  | "task_sent"
+  | "task_replied";
 
 export interface ProjectEvent {
   id?: number;
