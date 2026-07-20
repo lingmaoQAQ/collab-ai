@@ -60,7 +60,7 @@ registerTool(
 registerTool(
   {
     name: "write_file",
-    description: "写入文件。自动创建父目录。限制 100KB。",
+    description: "写入文件。覆盖已有文件时自动显示 diff 预览。自动创建父目录。限制 100KB。",
     parameters: {
       type: "object",
       properties: {
@@ -76,9 +76,40 @@ registerTool(
       return { callId: "", content: "内容超过 100KB 限制", isError: true };
     }
 
-    writeFileSync(fullPath, args.content, "utf-8");
     const rel = relative(process.cwd(), fullPath);
-    return { callId: "", content: `已写入: ${rel} (${args.content.length} 字节)` };
+    let diffPreview = "";
+    let oldLen = 0, newLen = args.content.split("\n").length;
+
+    if (existsSync(fullPath)) {
+      const oldContent = readFileSync(fullPath, "utf-8");
+      const oldLines = oldContent.split("\n");
+      oldLen = oldLines.length;
+
+      const added = newLen - oldLen;
+      const sameCount = oldLines.filter((l) => args.content.includes(l)).length;
+      const removed = oldLen - sameCount;
+
+      diffPreview = `\n[Diff] ${rel}: ${oldLen}→${newLen}行 (${added > 0 ? "+" + added : ""}${removed > 0 ? "/-" + removed : ""})\n`;
+
+      const changes: string[] = [];
+      for (let i = 0; i < Math.max(oldLen, newLen); i++) {
+        const oldL = oldLines[i] || "";
+        const newL = args.content.split("\n")[i] || "";
+        if (oldL !== newL && changes.length < 5) {
+          if (oldL && !newL) changes.push(`  - ${oldL.slice(0, 80)}`);
+          else if (!oldL && newL) changes.push(`  + ${newL.slice(0, 80)}`);
+          else changes.push(`  ~ ${oldL.slice(0, 35)} → ${newL.slice(0, 35)}`);
+        }
+      }
+      diffPreview += changes.length > 0 ? changes.join("\n") + "\n" : "";
+    }
+
+    writeFileSync(fullPath, args.content, "utf-8");
+    return {
+      callId: "",
+      content: `已写入: ${rel} (${args.content.length}B)` +
+        (oldLen > 0 ? ` | ${oldLen}→${newLen}行` : "") + diffPreview,
+    };
   },
 );
 
