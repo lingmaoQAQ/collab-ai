@@ -9,9 +9,10 @@ export function registerGatewayCommand(program: Command): void {
     .command("gateway")
     .description("启动 CollabAI Gateway 服务器（中心节点）")
     .option("-p, --port <number>", "端口号", "3000")
+    .option("-t, --token <string>", "访问令牌（不设则开放）")
     .action(async (options) => {
       const port = parseInt(options.port, 10);
-      startGateway(port);
+      startGateway(port, options.token || "");
 
       // 优雅退出
       process.on("SIGINT", () => {

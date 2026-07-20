@@ -116,6 +116,7 @@ export function registerChatCommand(program: Command): void {
     .option("-r, --room <id>", "项目空间 ID")
     .option("--new-room <name>", "创建新项目空间")
     .option("--connect <url>", "连接到 Gateway（如 ws://localhost:3000）")
+    .option("--token <string>", "Gateway 访问令牌")
     .option("-w, --workspace <path>", "工作区路径（Gateway 模式）")
     .action(async (options) => {
       // ── Gateway 模式：连接远程服务器 ──
@@ -133,7 +134,7 @@ export function registerChatCommand(program: Command): void {
         console.log(`  工作区: ${workspace}\n`);
 
         try {
-          await client.connect(wsUrl, roomId, userName, workspace);
+          await client.connect(wsUrl, roomId, userName, workspace, options.token || "");
         } catch (err) {
           console.log(error(`  连接失败: ${err instanceof Error ? err.message : err}`));
           console.log(muted("  提示: 请先启动 Gateway: npm run gateway -- --port 3000\n"));

@@ -15,8 +15,9 @@ export class GatewayClient {
 
   get connected(): boolean { return this._connected; }
 
-  connect(url: string, roomId: string, user: string, workspace: string): Promise<void> {
-    this.url = `${url}/ws?room=${encodeURIComponent(roomId)}&user=${encodeURIComponent(user)}&workspace=${encodeURIComponent(workspace)}`;
+  connect(url: string, roomId: string, user: string, workspace: string, token = ""): Promise<void> {
+    const params = `room=${encodeURIComponent(roomId)}&user=${encodeURIComponent(user)}&workspace=${encodeURIComponent(workspace)}`;
+    this.url = `${url}/ws?${params}${token ? `&token=${encodeURIComponent(token)}` : ""}`;
     return this.doConnect();
   }
 

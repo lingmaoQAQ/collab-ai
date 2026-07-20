@@ -19,12 +19,12 @@ const nodes = new Map<WebSocket, GatewayNode>();
 let _runtime: any = null;
 let _model: any = null;
 let _modelName = "";
+let _gatewayToken = "";
 
-async function initAI() {
+async function initAI(): Promise<void> {
   if (_runtime) return;
   const { getDefaultRegistry, createLlmRuntime } = await import("../llm/index.js");
   const registry = getDefaultRegistry();
-
   if (process.env.ANTHROPIC_API_KEY) {
     const { createAnthropicProvider } = await import("../llm/providers/anthropic.js");
     registry.register(createAnthropicProvider());
@@ -42,18 +42,16 @@ async function initAI() {
       api: "openai-chat",
     }));
   }
-
   const { BUILTIN_MODELS } = await import("../llm/index.js");
   _modelName = process.env.COLLABAI_MODEL || "deepseek-chat";
   _model = BUILTIN_MODELS.find((m: any) => m.id === _modelName);
   if (!_model) _model = BUILTIN_MODELS[0];
   _runtime = createLlmRuntime(registry);
-
-  // 注册工具
   await import("../tools/index.js");
 }
 
-export async function startGateway(port = 3000): Promise<void> {
+export async function startGateway(port = 3000, token = ""): Promise<void> {
+  _gatewayToken = token;
   const db = getDatabase();
   const userMgr = new UserManager(db);
   const roomMgr = new RoomManager(db);
@@ -103,6 +101,16 @@ export async function startGateway(port = 3000): Promise<void> {
 
   wss.on("connection", (ws, req) => {
     const url = new URL(req.url || "/", "http://localhost");
+    const clientToken = url.searchParams.get("token") || "";
+
+    // Token 认证
+    if (_gatewayToken && clientToken !== _gatewayToken) {
+      send(ws, { type: "error", message: "认证失败: token 不正确" });
+      ws.close();
+      console.log(`[Gateway] 拒绝未授权连接`);
+      return;
+    }
+
     const roomId = url.searchParams.get("room") || "";
     const userName = url.searchParams.get("user") || "anonymous";
     const workspace = url.searchParams.get("workspace") || process.cwd();
@@ -287,8 +295,9 @@ export async function startGateway(port = 3000): Promise<void> {
   server.listen(port, () => {
     console.log("");
     showBanner("0.8.0", _model?.name || "AI", _model?.provider?.name || "", "Gateway", `:${port}`);
+    const authStatus = _gatewayToken ? "需要 token" : "开放（无 token）";
     console.log(`  HTTP: http://localhost:${port}  |  WS: ws://localhost:${port}/ws`);
-    console.log(`  房间: ${roomMgr.list().length}  |  在线: ${nodes.size}\n`);
+    console.log(`  认证: ${authStatus}  |  房间: ${roomMgr.list().length}  |  在线: ${nodes.size}\n`);
   });
 }
 
