@@ -328,13 +328,43 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
             break;
           }
 
-          // ── 结构化任务消息（子组感知路由） ──
+          // ── 结构化任务消息（子组感知 + AI 分析） ──
           case "task": {
+            // AI 分析任务内容，生成建议
+            let aiAdvice = "";
+            if (_runtime) {
+              try {
+                const mem = new MemoryStore(node.roomId, db);
+                const relatedMemories = mem.search(
+                  (msg.payload as any).file || (msg.payload as any).topic || msg.taskType, 3,
+                );
+                const memContext = relatedMemories.map((m) => `[${m.category}] ${m.key}: ${m.value}`).join("\n");
+
+                const stream = _runtime.streamSimple({
+                  model: _model,
+                  messages: [{
+                    role: "user",
+                    content: `分析以下任务并生成 1-2 句中文建议（不超过100字）：
+任务类型: ${msg.taskType}
+发送者: ${node.user}
+内容: ${JSON.stringify(msg.payload).slice(0, 300)}
+相关项目记忆: ${memContext || "无"}
+建议聚焦：受影响的人需要注意什么？`,
+                  }],
+                  maxTokens: 150,
+                  temperature: 0.3,
+                });
+                for await (const e of stream) {
+                  if (e.type === "text_delta") aiAdvice += e.text;
+                }
+              } catch { /* AI分析失败不影响投递 */ }
+            }
+
             const taskMsg = {
               type: "task_notify" as const,
               taskType: msg.taskType,
               from: node.user,
-              payload: msg.payload,
+              payload: { ...msg.payload, aiAdvice: aiAdvice.trim() || undefined },
               priority: msg.priority || "normal",
               messageId: "task_" + Date.now(),
               timestamp: new Date().toISOString(),

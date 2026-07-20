@@ -14,6 +14,7 @@ import type { Model } from "../../llm/types.js";
 import type { LlmRuntime } from "../../llm/runtime.js";
 import { getDatabase, closeDatabase } from "../../sessions/database.js";
 import { SessionManager, generateTitle } from "../../sessions/manager.js";
+import { SessionStore } from "../../sessions/store.js";
 import { ContextEngine } from "../../context/engine.js";
 import { compactConversation } from "../../context/compact.js";
 import { UsageTracker, estimateTokens } from "../../utils/usage.js";
@@ -401,7 +402,7 @@ export function registerChatCommand(program: Command): void {
             await handleCommand(cmd, arg, {
               sm, runtime, model, memory, events,
               userMgr, roomMgr, user, room, engine, usage,
-              messages, systemPrompt, rl, config, registry,
+              messages, systemPrompt, rl, config, registry, db,
             });
           } catch (err) {
             console.log(`Error: ${err instanceof Error ? err.message : err}`);
@@ -541,6 +542,7 @@ interface CmdCtx {
   room: Room;
   engine: ContextEngine;
   usage: UsageTracker;
+  db: ReturnType<typeof getDatabase>;
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
   systemPrompt: string;
   rl: readline.Interface;
@@ -549,7 +551,7 @@ interface CmdCtx {
 
 async function handleCommand(cmd: string, arg: string, ctx: CmdCtx) {
   const { sm, runtime, model, memory, events, userMgr, roomMgr, user, room,
-    engine, usage, messages, systemPrompt, rl, registry } = ctx;
+    engine, usage, messages, systemPrompt, rl, registry, db } = ctx;
 
   switch (cmd) {
     case "/quit": case "/exit":
@@ -695,17 +697,119 @@ async function handleCommand(cmd: string, arg: string, ctx: CmdCtx) {
     // ---- 任务追踪 ----
     // ---- 组织拓扑 ----
     // ---- 子组协调 ----
+    // ---- 自动变更检测 ----
+    case "/changes": {
+      const graph = loadOrgGraph();
+      if (!graph) { console.log(muted("  未找到 org-graph.yml，无法分析影响范围")); break; }
+      if (!sm.getCurrent()) { console.log(muted("  无活跃会话")); break; }
+
+      // 获取最近的工具调用（从消息中查找 write_file/edit_file）
+      const recentMsgs = sm.getMessages().slice(-10);
+      const toolUses = recentMsgs.filter((m) =>
+        m.role === "assistant" && (m.content.includes("已写入") || m.content.includes("已编辑")),
+      );
+
+      if (!toolUses.length) {
+        console.log(muted("  最近没有文件修改记录"));
+        break;
+      }
+
+      console.log(info(`\n  检测到 ${toolUses.length} 个文件修改，分析影响范围...`));
+
+      // 提取文件名
+      const changedFiles: string[] = [];
+      for (const m of toolUses) {
+        const match = m.content.match(/([^\s:]+\.(?:py|ts|js|java|go|rs))/);
+        if (match) changedFiles.push(match[1]);
+      }
+
+      // 查找可能受影响的用户（根据技能匹配）
+      const affected = new Map<string, string[]>(); // user → reasons
+      for (const file of changedFiles) {
+        // 根据文件类型推断影响
+        const ext = file.split(".").pop() || "";
+        const skills: Record<string, string[]> = {
+          py: ["python"], ts: ["typescript", "前端"], js: ["javascript", "前端"],
+          java: ["java"], go: ["go"], rs: ["rust"],
+        };
+        const relevantSkills = skills[ext] || [ext];
+        for (const skill of relevantSkills) {
+          for (const node of findBySkill(graph, skill)) {
+            if (node.id === user.id) continue;
+            if (!affected.has(node.name)) affected.set(node.name, []);
+            affected.get(node.name)!.push(file);
+          }
+        }
+      }
+
+      if (!affected.size) {
+        console.log(muted("  未找到受影响的用户"));
+        break;
+      }
+
+      console.log(info("  建议通知以下用户:"));
+      for (const [name, files] of affected) {
+        console.log(`  ${bold(name)}: ${dim("修改了")} ${files.join(", ")}`);
+      }
+      console.log(muted("\n  使用 /task send <用户> <消息> 发送通知"));
+      console.log("");
+      break;
+    }
+
     case "/group": {
       const graph = loadOrgGraph();
       if (!graph) { console.log(muted("  未找到 org-graph.yml")); break; }
       const myGroup = findGroup(graph, user.id);
       if (!myGroup) { console.log(muted("  你不在任何组中")); break; }
+
+      if (arg === "summary" || arg === "report") {
+        // AI 生成组内聚合报告
+        const members = getGroupMembers(graph, myGroup.id);
+        const store2 = new SessionStore(db);
+        const memberActivity: string[] = [];
+
+        for (const m of members) {
+          const sess = store2.getLatestForUser(room.id, m.id);
+          if (sess) {
+            const msgs = store2.getRecentMessages(sess.id, 10);
+            const summary = msgs.filter((x) => x.role !== "system").slice(-4)
+              .map((x) => `${x.role}: ${x.content.slice(0, 60)}`).join(" | ");
+            memberActivity.push(`${m.name} (${sess.title}): ${summary || "无最近活动"}`);
+          } else {
+            memberActivity.push(`${m.name}: 无活动`);
+          }
+        }
+
+        console.log(info(`\n  正在生成 ${myGroup.name} 聚合报告...`));
+        try {
+          const stream = runtime.streamSimple({
+            model,
+            messages: [{
+              role: "user",
+              content: `用3-5句话中文总结以下团队活动（作为组长的日报）：\n\n${memberActivity.join("\n")}`,
+            }],
+            maxTokens: 200,
+            temperature: 0.3,
+          });
+          let report = "";
+          for await (const e of stream) { if (e.type === "text_delta") report += e.text; }
+          console.log(highlight(`\n  ${myGroup.name} 活动报告:`));
+          console.log(dim("  " + "-".repeat(40)));
+          console.log("  " + report.trim().split("\n").join("\n  "));
+          console.log("");
+        } catch {
+          console.log(muted("  报告生成失败"));
+        }
+        break;
+      }
+
       const members = getGroupMembers(graph, myGroup.id);
       const siblings = getSiblings(graph, user.id);
       console.log(info(`\n  你的组: ${myGroup.name} (${myGroup.id})`));
       console.log(dim("  成员: ") + members.map((m) => m.name).join(", "));
       if (siblings.length) console.log(dim("  同级: ") + siblings.map((s) => s.name).join(", "));
       if (myGroup.skills?.length) console.log(dim("  组技能: ") + myGroup.skills.join(", "));
+      console.log(muted("  /group summary  — 生成组内活动报告"));
       console.log("");
       break;
     }
