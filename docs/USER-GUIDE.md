@@ -86,7 +86,9 @@ npm run chat -- --connect ws://192.168.1.100:3000 --room <项目ID> --user Bob  
 | `/list` | 列出我的会话 |
 | `/save` | 保存当前会话并生成 AI 摘要 |
 | `/clear` | 清除当前对话 |
+| `/compact` | 压缩上下文（LLM摘要老消息，节省token） |
 | `/export [文件名]` | 导出为 Markdown 文件 |
+| `/usage` | 查看 Token 用量和成本 |
 
 ### 上下文管理
 
@@ -101,11 +103,13 @@ npm run chat -- --connect ws://192.168.1.100:3000 --room <项目ID> --user Bob  
 | 命令 | 说明 |
 |------|------|
 | `/tools` | 列出所有可用工具 |
-| `/run <命令>` | 执行 Shell 命令 |
+| `/run <命令>` | 执行 Shell 命令（危险操作自动拦截） |
 | `/cat <文件>` | 读取文件内容 |
 | `/ls [路径]` | 列出目录 |
 | `/search <正则>` | 在代码中正则搜索 |
 | `/workspace [路径]` | 查看或切换工作目录 |
+
+> AI 使用 `write_file` 覆盖已有文件时，自动显示 diff 预览（行数变化 + 具体改动行）。
 
 ### 协作命令
 
