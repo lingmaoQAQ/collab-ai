@@ -42,13 +42,14 @@ collab-ai/
 │   ├── llm/             # ✅ LLM 抽象层 — types / registry / runtime
 │   │   └── providers/   # ✅ Anthropic + OpenAI + Chat Completions
 │   ├── config/          # ✅ 配置系统 — 环境变量 + JSON
-│   ├── sessions/        # ✅ 会话层 — SQLite 存储 + Manager
-│   ├── memory/          # ✅ 记忆系统 — 跨会话知识存储
-│   ├── cli/             # ✅ CLI — Commander + 交互式 chat
-│   ├── gateway/         # 🔲 网关层 — 多用户入口路由
+│   ├── identity/        # ✅ 身份系统 — UserManager + RoomManager
+│   ├── sessions/        # ✅ 会话层 — room + user 隔离
+│   ├── memory/          # ✅ 记忆系统 — room 级共享
+│   ├── events/          # ✅ 事件系统 — 项目活动日志
+│   ├── cli/             # ✅ CLI — 多用户协作 chat
+│   ├── context/         # 🔲 上下文引擎 — UserContext + ProjectContext
 │   ├── agents/          # 🔲 Agent 层 — AI Agent 生命周期
 │   ├── workspace/       # 🔲 工作区层 — 文件隔离与合并
-│   ├── project/         # 🔲 项目大脑 — 全局认知维护
 │   ├── style/           # 🔲 风格引擎 — 开发者风格学习
 │   ├── channels/        # 🔲 通道层 — Slack/钉钉/Webhook
 │   └── merge/           # 🔲 合并引擎 — 语义冲突检测与解决
@@ -58,14 +59,36 @@ collab-ai/
 └── skills/               # AI 技能定义
 ```
 
-## 核心模块依赖关系
+## 核心模块依赖关系（当前 v0.3.0）
 
 ```
-channels → gateway → sessions → context → agents
-                       ↓            ↓
-                   workspace    project
-                       ↓            ↓
-                    merge ←──── style
+cli/chat ← identity (UserManager, RoomManager)
+         ← sessions (SessionManager: room + user)
+         ← memory (MemoryStore: room 级共享)
+         ← events (EventStore: 协作日志)
+         ← llm (runtime + providers)
+         ← config
+```
+
+**隔离模型**：`Room > User > Session > Message`，每层都有外键约束。
+同一 Room 内共享 Memory 和 Events，Session 严格按 user_id 隔离。
+
+## 数据库 Schema
+
+```
+rooms ──┐                    project_memories ── room_id
+        │ 1:N                                  ── author_id → users
+  room_members (多对多)
+        │
+users ──┘
+
+user_sessions ── room_id → rooms
+              ── user_id → users
+              │ 1:N
+        session_messages
+
+project_events ── room_id → rooms
+               ── user_id → users
 ```
 
 ## 技术选型原则
