@@ -745,6 +745,23 @@ async function handleCommand(cmd: string, arg: string, ctx: CmdCtx) {
       break;
     }
 
+    case "/branch": {
+      if (!arg) { console.log(muted("  用法: /branch <新分支标题>")); break; }
+      const curMsgs = sm.getMessages();
+      if (!curMsgs.length) { console.log(muted("  无消息可分支")); break; }
+      sm.startSession(arg, model.id, systemPrompt);
+      // 复制最近消息到新分支
+      for (const m of curMsgs.slice(0, -2)) {
+        sm.saveMessage(m.role as "user" | "assistant", m.content);
+      }
+      messages.length = 0;
+      for (const m of curMsgs.slice(0, -2)) {
+        messages.push({ role: m.role as "system" | "user" | "assistant", content: m.content });
+      }
+      console.log(info(`  已分支到: ${arg} (复制了 ${curMsgs.length - 2} 条消息)`));
+      break;
+    }
+
     case "/rename": {
       if (!arg) { console.log(muted("  用法: /rename <新标题>")); break; }
       sm.updateTitle(arg);
