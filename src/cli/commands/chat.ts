@@ -480,6 +480,7 @@ export function registerChatCommand(program: Command): void {
 
           // AI 工具调用循环（带 fallback 到纯文本）
           const renderer = createStreamRenderer();
+          renderer.loading();  // 显示加载动画
           let text = "";
           let toolCount = 0;
           try {
