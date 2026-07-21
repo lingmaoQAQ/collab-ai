@@ -14,6 +14,7 @@ import { showBanner } from "../ui/banner.js";
 import { log } from "../utils/log.js";
 import { closeDatabase } from "../sessions/database.js";
 import { loadOrgGraph, findGroup, getGroupMembers, getParent } from "../org/index.js";
+import { CollabError } from "../utils/errors.js";
 import type { NodeMessage, GatewayMessage, GatewayNode } from "./types.js";
 
 const nodes = new Map<WebSocket, GatewayNode>();
@@ -123,7 +124,7 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
     const room = roomMgr.get(roomId);
 
     if (!room) {
-      send(ws, { type: "error", message: `Room "${roomId}" not found. Create via POST /rooms first.` });
+      send(ws, { type: "error", message: CollabError.notFound("room").message });
       ws.close();
       return;
     }
