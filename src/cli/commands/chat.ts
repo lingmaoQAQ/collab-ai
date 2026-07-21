@@ -1101,6 +1101,62 @@ async function handleCommand(cmd: string, arg: string, ctx: CmdCtx) {
     }
 
     // ---- 系统状态 ----
+    // ---- 历史搜索 ----
+    case "/history": {
+      if (!arg) { console.log(muted("  用法: /history <关键词>")); break; }
+      const store3 = new SessionStore(db);
+      const allSessions = sm.listSessions(20);
+      let found = 0;
+      console.log(info(`\n  搜索 "${arg}":`));
+      for (const s of allSessions) {
+        const msgs = store3.getRecentMessages(s.sessionId, 50);
+        const matches = msgs.filter((m) =>
+          m.role !== "system" && m.content.toLowerCase().includes(arg.toLowerCase()),
+        );
+        if (matches.length) {
+          console.log(dim(`  ── ${s.title} ──`));
+          for (const m of matches.slice(-3)) {
+            console.log(
+              dim(`  ${m.role === "user" ? ">" : "●"} `) +
+              m.content.slice(0, 100).replace(/\n/g, " "),
+            );
+          }
+          found++;
+        }
+      }
+      if (!found) console.log(muted("  未找到匹配的消息"));
+      console.log("");
+      break;
+    }
+
+    // ---- Git 集成 ----
+    case "/git": {
+      const gitCmds: Record<string, string> = {
+        status: "git status --short",
+        diff: "git diff --stat",
+        log: "git log --oneline -10",
+        branch: "git branch",
+        stash: "git stash list",
+      };
+      const subCmd = arg || "status";
+      const gitCmd = gitCmds[subCmd];
+      if (!gitCmd) {
+        console.log(muted(`  /git [${Object.keys(gitCmds).join("|")}]`));
+        break;
+      }
+      try {
+        const { execSync } = await import("node:child_process");
+        const output = execSync(gitCmd, { encoding: "utf-8", timeout: 5000 }).trim();
+        console.log(info(`\n  $ ${gitCmd}`));
+        console.log(dim("  " + "-".repeat(40)));
+        console.log(output.split("\n").map((l) => dim("  ") + l).join("\n"));
+        console.log("");
+      } catch (err: any) {
+        console.log(error(`  git ${subCmd} 失败: ${err.message?.slice(0, 80) || err}`));
+      }
+      break;
+    }
+
     case "/status": {
       const s = sm.getCurrent();
       const graph = loadOrgGraph();

@@ -9,6 +9,7 @@ export interface ToolDef {
       type: string;
       description: string;
       enum?: string[];
+      items?: Record<string, unknown>;  // 支持数组类型参数
     }>;
     required?: string[];
   };

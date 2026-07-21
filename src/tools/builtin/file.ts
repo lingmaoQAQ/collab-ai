@@ -205,3 +205,81 @@ registerTool(
     };
   },
 );
+
+registerTool(
+  {
+    name: "batch_edit",
+    description: "一次修改多个文件。edits 数组每项包含 path/old_string/new_string。任一失败则全部回滚。",
+    parameters: {
+      type: "object",
+      properties: {
+        edits: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              path: { type: "string" },
+              old_string: { type: "string" },
+              new_string: { type: "string" },
+            },
+            required: ["path", "old_string", "new_string"],
+          },
+          description: "编辑列表",
+        },
+      },
+      required: ["edits"],
+    },
+  },
+  async (args) => {
+    const edits = (args as any).edits as Array<{ path: string; old_string: string; new_string: string }> | undefined;
+    if (!edits?.length) return { callId: "", content: "edits 为空", isError: true };
+    if (edits.length > 10) return { callId: "", content: "一次最多10个编辑", isError: true };
+
+    // 先备份所有文件
+    const backups = new Map<string, string>();
+    const results: string[] = [];
+
+    try {
+      for (let i = 0; i < edits.length; i++) {
+        const e = edits[i];
+        const fullPath = safePath(e.path);
+        if (!backups.has(fullPath) && existsSync(fullPath)) {
+          backups.set(fullPath, readFileSync(fullPath, "utf-8"));
+        }
+
+        const content = existsSync(fullPath) ? readFileSync(fullPath, "utf-8") : "";
+        const oldStr = e.old_string;
+        const newStr = e.new_string;
+
+        let idx = 0, count = 0, lastIdx = -1;
+        while ((idx = content.indexOf(oldStr, idx)) !== -1) {
+          count++; lastIdx = idx; idx += oldStr.length || 1;
+        }
+        if (count === 0) {
+          results.push(`[${i + 1}/${edits.length}] ${e.path}: 未找到匹配`);
+          continue;
+        }
+        if (count > 1) {
+          results.push(`[${i + 1}/${edits.length}] ${e.path}: 匹配${count}处，跳过`);
+          continue;
+        }
+
+        if (!backups.has(fullPath)) backups.set(fullPath, "");
+        const dir = dirname(fullPath);
+        if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+
+        const newContent = content.slice(0, lastIdx) + newStr + content.slice(lastIdx + oldStr.length);
+        writeFileSync(fullPath, newContent, "utf-8");
+        results.push(`[${i + 1}/${edits.length}] ${e.path}: OK`);
+      }
+
+      return { callId: "", content: `批量编辑 (${results.length}个):\n${results.join("\n")}` };
+    } catch (err) {
+      // 回滚
+      for (const [path, backup] of backups) {
+        try { writeFileSync(path, backup, "utf-8"); } catch { /* ignore */ }
+      }
+      return { callId: "", content: `批量编辑失败，已回滚: ${err instanceof Error ? err.message : ""}`, isError: true };
+    }
+  },
+);
