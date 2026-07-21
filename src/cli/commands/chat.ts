@@ -367,10 +367,29 @@ export function registerChatCommand(program: Command): void {
       let titleGenerated = dbMessages.length > 1;
 
       // ---- 交互循环 ----
+      // Tab 补全
+      const allCommands = [
+        "/new", "/load", "/list", "/save", "/clear", "/compact",
+        "/context", "/usage", "/summary", "/export",
+        "/model", "/help", "/quit",
+        "/rooms", "/members", "/invite", "/events",
+        "/remember", "/recall", "/memories",
+        "/run", "/cat", "/ls", "/search",
+        "/workspace", "/changes", "/status",
+        "/org", "/group", "/task", "/todo",
+        "/tools", "/plugins",
+      ];
+      const completer = (line: string) => {
+        if (!line.startsWith("/")) return [[], line];
+        const hits = allCommands.filter((c) => c.startsWith(line));
+        return [hits.length ? hits : allCommands, line];
+      };
+
       const rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout,
-        prompt: `[${room.name.slice(0, 12)}] > `,
+        prompt: dim("[") + user.name + dim("] > "),
+        completer,
       });
 
       // 优雅退出 + 断点保存
@@ -525,7 +544,12 @@ export function registerChatCommand(program: Command): void {
             runtime, model,
           ).catch(() => {});
         } catch (err) {
-          console.error(error(`\n  Error: ${err instanceof Error ? err.message : err}`));
+          const errMsg = err instanceof Error ? err.message : String(err);
+          if (errMsg.includes("timeout") || errMsg.includes("ECONN")) {
+            console.log(muted("  (API超时，请检查网络)"));
+          } else {
+            console.error(error(`\n  Error: ${errMsg}`));
+          }
           messages.pop();
         }
         rl.prompt();
@@ -560,6 +584,21 @@ interface CmdCtx {
 async function handleCommand(cmd: string, arg: string, ctx: CmdCtx) {
   const { sm, runtime, model, memory, events, userMgr, roomMgr, user, room,
     engine, usage, messages, systemPrompt, rl, registry, db } = ctx;
+
+  // 命令别名
+  const aliases: Record<string, string> = {
+    "/q": "/quit", "/exit": "/quit",
+    "/h": "/help",
+    "/c": "/clear",
+    "/s": "/save",
+    "/n": "/new",
+    "/l": "/list",
+    "/w": "/workspace",
+    "/r": "/rooms",
+    "/m": "/model",
+    "/st": "/status",
+  };
+  if (aliases[cmd]) cmd = aliases[cmd];
 
   switch (cmd) {
     case "/quit": case "/exit":
