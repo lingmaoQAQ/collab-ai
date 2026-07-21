@@ -87,6 +87,17 @@ function initTables(db: Database.Database): void {
       UNIQUE(room_id, key)
     );
 
+    -- Gateway 离线消息队列
+    CREATE TABLE IF NOT EXISTS offline_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+      target_user TEXT NOT NULL,
+      message_json TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      delivered INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_offline_target ON offline_messages(room_id, target_user, delivered);
+
     -- 项目活动事件
     CREATE TABLE IF NOT EXISTS project_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

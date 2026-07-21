@@ -137,6 +137,21 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
       .map((n) => ({ name: n.user, workspace: n.workspace }));
     send(ws, { type: "welcome", room: { id: room.id, name: room.name }, members });
 
+    // 回放离线消息
+    try {
+      const offlineMsgs = db.prepare(
+        `SELECT id, message_json FROM offline_messages WHERE room_id = ? AND target_user = ? AND delivered = 0 ORDER BY id`,
+      ).all(roomId, userName) as Array<{ id: number; message_json: string }>;
+      if (offlineMsgs.length > 0) {
+        for (const om of offlineMsgs) {
+          try { send(ws, JSON.parse(om.message_json)); } catch { /* skip */ }
+        }
+        db.prepare(`UPDATE offline_messages SET delivered = 1 WHERE room_id = ? AND target_user = ?`)
+          .run(roomId, userName);
+        send(ws, { type: "activity", from: "系统", text: `回放 ${offlineMsgs.length} 条离线消息`, timestamp: new Date().toISOString() });
+      }
+    } catch { /* ignore */ }
+
     // 发送项目动态摘要
     try {
       const wn = mediator.whatsNew(roomId, user.id);
@@ -397,7 +412,10 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
                 send(ws, { type: "activity", from: "系统", text: `任务已送达 ${msg.to}${groupInfo}`, timestamp: new Date().toISOString() });
                 events.record(node.roomId, user.id, "task_sent", { taskType: msg.taskType, to: msg.to, sameGroup });
               } else {
-                send(ws, { type: "activity", from: "系统", text: `${msg.to} 当前离线，任务已记录`, timestamp: new Date().toISOString() });
+                // 存入离线队列
+                db.prepare(`INSERT INTO offline_messages (room_id, target_user, message_json) VALUES (?, ?, ?)`)
+                  .run(node.roomId, msg.to, JSON.stringify(taskMsg));
+                send(ws, { type: "activity", from: "系统", text: `${msg.to} 当前离线，消息已保存`, timestamp: new Date().toISOString() });
               }
             }
             break;
