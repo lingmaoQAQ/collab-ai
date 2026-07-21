@@ -429,7 +429,7 @@ export function registerChatCommand(program: Command): void {
             const title = await generateTitle(runtime, model, input);
             sm.updateTitle(title);
             titleGenerated = true;
-          } catch { /* ignore */ }
+          } catch { console.log(muted("  操作失败，请重试")); }
         }
 
         try {
@@ -449,7 +449,7 @@ export function registerChatCommand(program: Command): void {
               projectContext: assembled.systemPromptAddition || "",
             }, runtime, model);
             if (enhanced.addition) crossUserAddition = enhanced.addition;
-          } catch { /* 静默降级 */ }
+          } catch { console.log(muted("  (上下文增强暂不可用)")); }
 
           const ctxAdditions = [
             assembled.systemPromptAddition,
@@ -1057,6 +1057,27 @@ async function handleCommand(cmd: string, arg: string, ctx: CmdCtx) {
       for (const p of plugins) {
         console.log("  " + bold(p.name) + dim(" — ") + p.description);
       }
+      console.log("");
+      break;
+    }
+
+    // ---- 系统状态 ----
+    case "/status": {
+      const s = sm.getCurrent();
+      const graph = loadOrgGraph();
+      const myGroup = graph ? findGroup(graph, user.id) : null;
+      const onlineCount = (globalThis as any)._gatewayClient ? "Gateway 模式" : "本地模式";
+      console.log(info("\n  CollabAI 状态:"));
+      console.log(dim("  ") + "版本: " + "v1.3.0");
+      console.log(dim("  ") + "模式: " + onlineCount);
+      console.log(dim("  ") + "房间: " + room.name + " (" + roomMgr.getMembers(room.id).length + " 成员)");
+      console.log(dim("  ") + "用户: " + user.name);
+      if (myGroup) console.log(dim("  ") + "组: " + myGroup.name);
+      console.log(dim("  ") + "会话: " + (s ? `${s.title} (${s.messageCount}条)` : "无"));
+      console.log(dim("  ") + "记忆: " + memory.list().length + " 条");
+      console.log(dim("  ") + "工具: " + toolCount() + " 个");
+      console.log(dim("  ") + "模型: " + model.name);
+      console.log(dim("  ") + usage.summary());
       console.log("");
       break;
     }
