@@ -60,7 +60,19 @@ function initProviders() {
     }));
   }
   if (registry.list().length === 0) {
-    throw new Error("No API key found.");
+    console.log("");
+    console.log(highlight("  ╔══════════════════════════════════════╗"));
+    console.log(highlight("  ║") + "  欢迎使用 CollabAI！                  " + highlight("║"));
+    console.log(highlight("  ║") + "  未检测到 API Key。                   " + highlight("║"));
+    console.log(highlight("  ║") + "                                       " + highlight("║"));
+    console.log(highlight("  ║") + "  cp .env.example .env                 " + highlight("║"));
+    console.log(highlight("  ║") + "  编辑 .env，填入任意一个 API Key:     " + highlight("║"));
+    console.log(highlight("  ║") + "  DEEPSEEK_API_KEY=sk-xxx              " + highlight("║"));
+    console.log(highlight("  ║") + "  ANTHROPIC_API_KEY=sk-ant-xxx         " + highlight("║"));
+    console.log(highlight("  ║") + "  OPENAI_API_KEY=sk-xxx                " + highlight("║"));
+    console.log(highlight("  ╚══════════════════════════════════════╝"));
+    console.log("");
+    process.exit(0);
   }
   return registry;
 }
@@ -1200,6 +1212,53 @@ async function handleCommand(cmd: string, arg: string, ctx: CmdCtx) {
       } catch (err: any) {
         console.log(error(`  git ${subCmd} 失败: ${err.message?.slice(0, 80) || err}`));
       }
+      break;
+    }
+
+    // ---- 系统诊断 ----
+    case "/doctor": {
+      console.log(info("\n  CollabAI 诊断报告"));
+      console.log(dim("  " + "=".repeat(40)));
+
+      // DB
+      try {
+        db.prepare("SELECT 1").get();
+        console.log("  " + dim("✓") + " 数据库: 正常");
+      } catch { console.log("  " + error("✗ 数据库: 异常")); }
+
+      // API Keys
+      const keys = [
+        ["Anthropic", process.env.ANTHROPIC_API_KEY],
+        ["OpenAI", process.env.OPENAI_API_KEY],
+        ["DeepSeek", process.env.DEEPSEEK_API_KEY],
+      ];
+      for (const [name, key] of keys) {
+        console.log("  " + (key ? dim("✓") : muted("○")) + ` ${name}: ${key ? "已配置" : "未配置"}`);
+      }
+
+      // 当前模型
+      const providers = registry.list();
+      console.log("  " + dim("✓") + ` 已注册 Provider: ${providers.map((p) => p.api).join(", ")}`);
+      console.log("  " + dim("  模型: ") + model.name + " (" + model.provider.name + ")");
+
+      // 会话
+      const s = sm.getCurrent();
+      console.log("  " + (s ? dim("✓") : muted("○")) + ` 活跃会话: ${s ? s.title : "无"}`);
+
+      // 记忆
+      const mCount = memory.list().length;
+      console.log("  " + dim("✓") + ` 项目记忆: ${mCount} 条`);
+
+      // Org Graph
+      const graph = loadOrgGraph();
+      console.log("  " + (graph ? dim("✓") : muted("○")) + ` 组织拓扑: ${graph ? graph.nodes.length + "节点" : "未配置"}`);
+
+      // 工具
+      console.log("  " + dim("✓") + ` 工具数: ${toolCount()} 个`);
+
+      // 成本
+      console.log("  " + dim("  ") + usage.summary());
+      console.log("");
       break;
     }
 
