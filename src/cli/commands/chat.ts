@@ -481,6 +481,14 @@ export function registerChatCommand(program: Command): void {
           // AI 工具调用循环（带 fallback 到纯文本）
           const renderer = createStreamRenderer();
           renderer.loading();  // 显示加载动画
+
+          // 流式看门狗：10秒无响应提示
+          const watchdog = setTimeout(() => {
+            if (!renderer.hasOutput()) {
+              console.log(muted("\n  (响应较慢，仍在处理中...)"));
+            }
+          }, 10000);
+
           let text = "";
           let toolCount = 0;
           try {
@@ -502,6 +510,7 @@ export function registerChatCommand(program: Command): void {
             if (!renderer.hasOutput() && text) {
               process.stdout.write(aiPrefix() + text + "\n");
             }
+            clearTimeout(watchdog);
             renderer.done();
             if (toolCount > 0) {
               console.log(dim(`  (${toolCount} 个工具调用)\n`));
@@ -534,9 +543,12 @@ export function registerChatCommand(program: Command): void {
           autoSave();
           console.log(dim(`  (${outTokens} tok | ${usage.stats.requestCount}次 | $${usage.stats.cost.toFixed(4)})`));
 
-          // 长对话提醒压缩
-          if (messages.filter((m) => m.role !== "system").length > 20) {
-            console.log(muted(`  💡 对话较长，建议 /compact 压缩上下文以节省 token`));
+          // 长对话提醒压缩（参考 OpenClaw 自动 compact）
+          const nonSysCount = messages.filter((m) => m.role !== "system").length;
+          if (nonSysCount > 30) {
+            console.log(highlight(`  ⚡ ${nonSysCount} 条消息，建议 /compact 压缩 (节省 ~60% token)`));
+          } else if (nonSysCount > 20) {
+            console.log(muted(`  💡 ${nonSysCount} 条消息，可以 /compact 压缩`));
           }
 
           // Mediator 分析：学习用户风格（异步，不阻塞）
@@ -721,6 +733,13 @@ async function handleCommand(cmd: string, arg: string, ctx: CmdCtx) {
       } catch (err) {
         console.log(error(`  压缩失败: ${err instanceof Error ? err.message : err}`));
       }
+      break;
+    }
+
+    case "/rename": {
+      if (!arg) { console.log(muted("  用法: /rename <新标题>")); break; }
+      sm.updateTitle(arg);
+      console.log(info(`  会话已重命名: ${arg}`));
       break;
     }
 
