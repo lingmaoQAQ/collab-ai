@@ -65,6 +65,14 @@ function initProviders() {
   return registry;
 }
 
+function formatRelativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  if (diff < 60000) return "刚刚";
+  if (diff < 3600000) return Math.floor(diff / 60000) + "分钟前";
+  if (diff < 86400000) return Math.floor(diff / 3600000) + "小时前";
+  return Math.floor(diff / 86400000) + "天前";
+}
+
 function sessionInfo(sm: SessionManager): string {
   const s = sm.getCurrent();
   if (!s) return "无活跃会话";
@@ -658,14 +666,15 @@ async function handleCommand(cmd: string, arg: string, ctx: CmdCtx) {
 
     case "/list": {
       const sessions = sm.listSessions(15);
-      if (!sessions.length) { console.log("暂无历史会话"); break; }
-      console.log("\n--- 我的会话 ---");
+      if (!sessions.length) { console.log(muted("  暂无历史会话")); break; }
+      console.log(info(`\n  会话列表 (${sessions.length}):`));
       for (const s of sessions) {
-        const date = new Date(s.updatedAt).toLocaleString("zh-CN");
-        const preview = (s.preview || "").slice(0, 40);
-        const cur = sm.getCurrent()?.id === s.sessionId ? " *" : "  ";
-        console.log(`${cur} ${s.sessionId.slice(0, 8)} | ${s.title} (${s.messageCount}条) | ${date}`);
-        if (preview) console.log(`     ${preview}`);
+        const cur = sm.getCurrent()?.id === s.sessionId;
+        const marker = cur ? highlight(" ▶") : dim("  ");
+        const title = cur ? bold(s.title) : s.title;
+        const date = formatRelativeTime(s.updatedAt);
+        const msgs = dim(`${s.messageCount}条`);
+        console.log(`${marker} ${title.padEnd(20)} ${msgs.padEnd(8)} ${dim(date)}`);
       }
       console.log("");
       break;
@@ -1210,6 +1219,20 @@ async function handleCommand(cmd: string, arg: string, ctx: CmdCtx) {
 
     case "/run": {
       if (!arg) { console.log(error("  用法: /run <命令>")); break; }
+      // 确认执行（危险命令提示）
+      const dangerousWords = ["rm ", "delete", "drop ", "truncate", "format", "mkfs"];
+      const isDangerous = dangerousWords.some((w) => arg.toLowerCase().includes(w));
+      if (isDangerous) {
+        console.log(highlight(`  ⚠ 命令: ${arg}`));
+        console.log(muted("  确认执行? (输入 yes 确认，其他取消)"));
+        const answer = await new Promise<string>((resolve) => {
+          rl.question(dim("  > "), resolve);
+        });
+        if (answer.toLowerCase() !== "yes") {
+          console.log(muted("  已取消"));
+          break;
+        }
+      }
       const result = await executeTool({ id: "cli", name: "run_command", arguments: { command: arg } });
       console.log(result.isError ? error(result.content) : result.content);
       break;
@@ -1273,16 +1296,38 @@ async function handleCommand(cmd: string, arg: string, ctx: CmdCtx) {
 
     // ---- 记忆管理 ----
     case "/memories": {
-      const mems = memory.list();
-      if (!mems.length) { console.log(muted("  暂无项目记忆")); break; }
-      console.log(info(`\n  项目记忆 (${mems.length}):`));
-      for (const m of mems) {
-        const author = m.authorId ? userMgr.get(m.authorId)?.name || m.authorId.slice(0, 6) : "未知";
-        console.log(
-          "  " + bold(`[${m.category}]`) + " " + m.key +
-          dim(" — ") + m.value.slice(0, 60) +
-          dim(" (" + author + ")"),
-        );
+      const parts = arg.split(" ");
+      const sub = parts[0];
+      const rest = parts.slice(1).join(" ");
+
+      if (sub === "delete" && parts[1]) {
+        const key = parts[1];
+        memory.delete(key);
+        console.log(info(`  已删除记忆: ${key}`));
+      } else if (sub === "edit" && parts[1]) {
+        const key = parts[1];
+        const val = parts.slice(2).join(" ");
+        if (!val) { console.log(muted("  用法: /memories edit <key> <新值>")); break; }
+        const existing = memory.get(key);
+        memory.set({
+          key, value: val,
+          category: (existing?.category as any) || "knowledge",
+          authorId: user.id,
+        });
+        console.log(info(`  已更新: ${key}`));
+      } else if (!sub || sub === "list") {
+        const mems = memory.list();
+        if (!mems.length) { console.log(muted("  暂无项目记忆")); break; }
+        console.log(info(`\n  项目记忆 (${mems.length}):`));
+        for (const m of mems) {
+          const author = m.authorId ? userMgr.get(m.authorId)?.name || m.authorId.slice(0, 6) : "未知";
+          console.log(
+            "  " + bold(`[${m.category}]`) + " " + m.key +
+            dim(" — ") + m.value.slice(0, 60) +
+            dim(" (" + author + ")"),
+          );
+        }
+        console.log(muted("  /memories delete <key>  |  /memories edit <key> <value>"));
       }
       console.log("");
       break;
