@@ -299,7 +299,41 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
             store.addMessage({ sessionId: session.id, role: "assistant", content: responseText });
             events.record(roomId, user.id, "message_sent", { sessionId: session.id });
 
-            // 9. 回复提问者
+            // 8.5 自动变更检测：AI 改了文件 → 查 Org Graph → 建议通知
+            let changeSuggestion = "";
+            try {
+              const changedPattern = /(已写入|已编辑)[:\s]*([^\s,]+\.(?:py|ts|js|java|go|rs|yml|yaml|json|md))/g;
+              let match;
+              const changedFiles: string[] = [];
+              while ((match = changedPattern.exec(responseText)) !== null) {
+                changedFiles.push(match[2]);
+              }
+              if (changedFiles.length > 0) {
+                const graph = loadOrgGraph();
+                if (graph) {
+                  const affected = new Map<string, string>();
+                  for (const file of changedFiles) {
+                    const ext = file.split(".").pop() || "";
+                    const skillMap: Record<string, string> = { py: "python", ts: "typescript", js: "javascript", go: "go", rs: "rust" };
+                    const skill = skillMap[ext] || ext;
+                    for (const n of (await import("../org/types.js")).findBySkill(graph, skill)) {
+                      if (n.id !== user.id && !affected.has(n.name)) {
+                        affected.set(n.name, file);
+                      }
+                    }
+                  }
+                  if (affected.size > 0) {
+                    const names = [...affected.keys()].join(", ");
+                    changeSuggestion = `\n\n💡 检测到文件变更，可能影响: ${names}。使用 /task send <用户> <内容> 通知他们。`;
+                  }
+                }
+              }
+            } catch { /* 检测失败不阻塞 */ }
+
+            // 9. 回复提问者（含变更建议）
+            if (changeSuggestion && !responseText.includes("💡 检测到")) {
+              responseText += changeSuggestion;
+            }
             send(ws, {
               type: "ai_response",
               text: responseText,

@@ -571,6 +571,27 @@ export function registerChatCommand(program: Command): void {
             console.log(muted(`  💡 ${nonSysCount} 条消息，可以 /compact 压缩`));
           }
 
+          // 自动变更检测
+          const changedPattern = /(已写入|已编辑)[:\s]*([^\s,]+\.(?:py|ts|js|java|go|rs|yml|yaml|json|md))/g;
+          let chMatch;
+          const changed: string[] = [];
+          while ((chMatch = changedPattern.exec(text)) !== null) changed.push(chMatch[2]);
+          if (changed.length > 0) {
+            const graph = loadOrgGraph();
+            if (graph) {
+              const affected = new Set<string>();
+              for (const f of changed) {
+                for (const n of findBySkill(graph, f.split(".").pop() || "")) {
+                  if (n.id !== user.id) affected.add(n.name);
+                }
+              }
+              if (affected.size > 0) {
+                console.log(highlight(`  💡 文件变更可能影响: ${[...affected].join(", ")}`));
+                console.log(muted(`  使用 /task send <用户> <消息> 通知他们`));
+              }
+            }
+          }
+
           // Mediator 分析：学习用户风格（异步，不阻塞）
           mediator.analyzeTurn(
             { roomId: room.id, userId: user.id, userMessage: input, aiResponse: text },
