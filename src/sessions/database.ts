@@ -17,6 +17,8 @@ export function getDatabase(): Database.Database {
   _db = new Database(dbPath);
   _db.pragma("journal_mode = WAL");
   _db.pragma("foreign_keys = ON");
+  // WAL 模式下每次写操作后立即同步，确保多进程可见
+  _db.pragma("synchronous = FULL");
   initTables(_db);
   return _db;
 }
