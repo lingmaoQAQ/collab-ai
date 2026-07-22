@@ -520,8 +520,9 @@ export function registerChatCommand(program: Command): void {
             assembled.systemPromptAddition,
             crossUserAddition,
           ].filter(Boolean).join("\n\n");
+          // 工具指令优先，项目上下文在后
           const finalSystem = ctxAdditions
-            ? `${ctxAdditions}\n\n---\n\n${systemPrompt}`
+            ? `${systemPrompt}\n\n---\n\n${ctxAdditions}`
             : systemPrompt;
 
           // AI 工具调用循环（带 fallback 到纯文本）

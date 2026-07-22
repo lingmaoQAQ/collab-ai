@@ -66,7 +66,7 @@ export function createOpenAIChatProvider(
       max_tokens: opts.maxTokens ?? opts.model.maxTokens,
       temperature: opts.temperature,
       tools: openaiTools?.length ? openaiTools : undefined,
-      tool_choice: openaiTools?.length ? "auto" as const : undefined,
+      tool_choice: (openaiTools?.length ? "auto" : undefined) as any,
     });
 
     let inputTokens = 0;
