@@ -18,6 +18,8 @@ import { log } from "../utils/log.js";
 import { closeDatabase } from "../sessions/database.js";
 import { loadOrgGraph, findGroup, getGroupMembers, getParent } from "../org/index.js";
 import { CollabError } from "../utils/errors.js";
+import { createNotifiers, notifyAll, formatTaskNotification } from "../notify/index.js";
+import type { Notifier } from "../notify/index.js";
 import type { NodeMessage, GatewayMessage, GatewayNode } from "./types.js";
 
 const nodes = new Map<WebSocket, GatewayNode>();
@@ -66,6 +68,7 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
   const events = new EventStore(db);
   const engine = new ContextEngine(db);
   const mediator = new Mediator(db);
+  const notifiers = createNotifiers();
 
   await initAI();
 
@@ -488,6 +491,14 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
             const targetGroup = msg.to !== "broadcast" && graph ? findGroup(graph, msg.to) : null;
             const sameGroup = senderGroup && targetGroup && senderGroup.id === targetGroup.id;
 
+            // 通知已配置的外部通道
+            if (notifiers.length > 0) {
+              const notifMsg = formatTaskNotification(
+                msg.taskType, node.user, msg.to, msg.payload,
+              );
+              notifyAll(notifiers, notifMsg);
+            }
+
             if (msg.to === "broadcast") {
               broadcast(node.roomId, taskMsg);
               events.record(node.roomId, user.id, "task_sent", { taskType: msg.taskType, to: "broadcast" });
@@ -551,7 +562,10 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
     showBanner("1.1.0", _model?.name || "AI", _model?.provider?.name || "", "Gateway", `:${port}`);
     const authStatus = _gatewayToken ? "需要 token" : "开放（无 token）";
     console.log(`  HTTP: http://localhost:${port}  |  WS: ws://localhost:${port}/ws`);
-    console.log(`  认证: ${authStatus}  |  房间: ${roomMgr.list().length}  |  在线: ${nodes.size}\n`);
+    const notifyStatus = notifiers.length > 0 ? `已启用 (${notifiers.map((n) => n.name).join(",")})` : "未配置";
+    console.log(`  认证: ${authStatus}`);
+    console.log(`  通知: ${notifyStatus}`);
+    console.log(`  房间: ${roomMgr.list().length}  |  在线: ${nodes.size}\n`);
   });
 
   // 优雅退出
