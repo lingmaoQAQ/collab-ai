@@ -20,9 +20,12 @@ registerTool(
     const cwd = args.cwd || process.cwd();
 
     // 安全检查
+    if (cmd.length > 5000) return { callId: "", content: "命令过长 (max 5000字符)", isError: true };
     const dangerous = [
       /rm\s+-rf\s+\//, /sudo\s+rm/, />\s*\/dev\/sda/,
       /:\(\)\s*\{/, /mkfs\./, /dd\s+if=/,
+      /curl.+\|\s*(ba)?sh/, /wget.+-O-\s*\|\s*(ba)?sh/,
+      /chmod\s+777/, /fork\s*bomb/i,
     ];
     for (const pattern of dangerous) {
       if (pattern.test(cmd)) {
