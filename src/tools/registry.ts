@@ -23,7 +23,8 @@ export async function executeTool(call: ToolCall): Promise<ToolResult> {
     return { callId: call.id, content: `Unknown tool: ${call.name}`, isError: true };
   }
   try {
-    return await entry.handler(call.arguments);
+    const result = await entry.handler(call.arguments);
+    return { ...result, callId: result.callId || call.id };
   } catch (err) {
     return {
       callId: call.id,
