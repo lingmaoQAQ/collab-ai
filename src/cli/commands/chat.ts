@@ -549,20 +549,9 @@ export function registerChatCommand(program: Command): void {
               onText: (t) => renderer.write(t),
               onToolUse: (tc) => {
                 toolCount++;
-                const detail = Object.values(tc.arguments).join(" ").slice(0, 60);
-                console.log("\n" + muted("  ⚡ " + tc.name + " ") + dim(detail));
-              },
-              confirmTool: async (tc) => {
-                // 文件编辑工具需要确认
-                const editTools = ["edit_file", "write_file", "batch_edit"];
-                if (!editTools.includes(tc.name)) return true;
-                const detail = JSON.stringify(tc.arguments).slice(0, 120);
-                console.log(highlight(`\n  确认执行 ${tc.name}?`));
-                console.log(dim(`  ${detail}\n`));
-                const answer = await new Promise<string>((resolve) => {
-                  rl.question(muted("  [y/n] "), resolve);
-                });
-                return answer.toLowerCase() === "y" || answer.toLowerCase() === "yes";
+                const detail = Object.values(tc.arguments).join(" ").slice(0, 80);
+                const marker = ["edit_file", "write_file"].includes(tc.name) ? " ✏️" : " ⚡";
+                console.log("\n" + muted(`  ${marker} ${tc.name} `) + dim(detail));
               },
             });
             text = result.finalText;
