@@ -549,9 +549,24 @@ export function registerChatCommand(program: Command): void {
               onText: (t) => renderer.write(t),
               onToolUse: (tc) => {
                 toolCount++;
-                const detail = Object.values(tc.arguments).join(" ").slice(0, 80);
-                const marker = ["edit_file", "write_file"].includes(tc.name) ? " ✏️" : " ⚡";
-                console.log("\n" + muted(`  ${marker} ${tc.name} `) + dim(detail));
+                const isEdit = ["edit_file", "write_file", "batch_edit"].includes(tc.name);
+                const marker = isEdit ? "✏️" : "⚡";
+                const args = tc.arguments as Record<string, any>;
+                const path = args.path || "";
+                const shortPath = path.replace(/\\/g, "/").split("/").pop() || path;
+
+                if (isEdit) {
+                  // 编辑类：显示文件 + 变化预览
+                  const oldS = (args.old_string || "").slice(0, 50).replace(/\n/g, "\\n");
+                  const newS = (args.new_string || "").slice(0, 50).replace(/\n/g, "\\n");
+                  console.log(
+                    "\n  " + muted(`${marker} 编辑 `) + bold(shortPath) +
+                    dim(`\n    - ${oldS}...`) +
+                    dim(`\n    + ${newS}...`),
+                  );
+                } else {
+                  console.log("\n  " + muted(`${marker} ${tc.name} `) + dim(path || ""));
+                }
               },
             });
             text = result.finalText;
@@ -561,7 +576,7 @@ export function registerChatCommand(program: Command): void {
             clearTimeout(watchdog);
             renderer.done();
             if (toolCount > 0) {
-              console.log(dim(`  (${toolCount} 个工具调用)\n`));
+              console.log(dim(`\n  ── ${toolCount} 个工具调用 ──\n`));
             }
           } catch {
             // Fallback: 简单流式
