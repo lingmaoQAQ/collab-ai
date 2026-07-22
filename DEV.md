@@ -1,76 +1,37 @@
-# CollabAI 开发指南 v1.3
+# CollabAI v2 开发指南
 
-## 项目数据
+## 重构方向
 
-| 指标 | 数据 |
-|------|------|
-| 模块 | 15 个 |
-| 源文件 | 57 个 |
-| 代码行数 | ~5800 行 TypeScript |
-| CLI 命令 | 38 个 |
-| 内置工具 | 10 个 |
-| 测试套件 | 5 套 (35 项) |
-| Git 提交 | 48 次 |
+基于 OpenClaw (MIT) 的 LLM 内核，构建单人 AI Coding 体验，然后接入多用户协作。
 
-## 架构全景
+## 当前进度
 
-```
-cli/chat.ts (2850行, 38命令)
-  ├── llm/          types → registry → runtime → providers/
-  │                    Anthropic / OpenAI / DeepSeek (openai-completions)
-  ├── config/       types → load (env + JSON)
-  ├── sessions/     database (SQLite 7表) → types → store → manager
-  ├── memory/       types → store (room级共享, 关键词评分搜索)
-  ├── identity/     types → manager (UserManager + RoomManager)
-  ├── events/       types → store (项目活动日志)
-  ├── context/      types → engine (assemble, ContextEngine)
-  │                 compact (LLM摘要压缩)
-  ├── mediator/     types → engine (whatsNew, enhanceContext, analyzeTurn)
-  ├── tools/        types → registry → loop (runToolLoop)
-  │                 builtin/ (bash, file(含edit/batch), search)
-  ├── ui/           theme → format → stream → banner → status
-  ├── gateway/      types → server + client (WS重连+缓冲)
-  ├── org/          types → loader (YAML拓扑 → 树操作)
-  └── plugins/      types → loader (目录扫描, 自动注册)
-```
+- [x] Step 1: 复制 OpenClaw 内核（packages/ 编译通过）
+- [ ] Step 2: 对接 agent-loop，跑通单人 AI 对话
+- [ ] Step 3: 恢复多用户协作层
+- [ ] Step 4: 两张表的逐项验证
 
-## 依赖层级
+## 文件结构
 
 ```
-cli ← gateway + tools + ui + context + mediator
-       ↓         ↓      ↓       ↓         ↓
-     sessions  memory  format  identity  events
-                  ↓               ↓
-              database ←── all ──→ database
+packages/          ← OpenClaw 内核 (MIT)，不修改源码
+src/               ← CollabAI 代码
+  agent/           ← wrapper for OpenClaw agent-loop
+  collab/          ← multi-user collaboration (identity, sessions, memory, ...)
+  gateway/         ← multi-user Gateway server
+  cli/             ← CLI commands
+  ui/              ← terminal UI
+  config/          ← configuration
+  utils/           ← utilities (logging, usage, errors)
 ```
 
-## 数据库 Schema (7表)
-
-```
-rooms ── room_members(多对多) ── users
-  │ 1:N user_sessions              │ author_id
-  │     └ 1:N session_messages      ↓
-  │                          project_memories (UNIQUE room_id,key)
-  └── project_events (room_id, user_id, event_type)
-```
-
-## 快速开始
+## 快速开始（暂不可用）
 
 ```bash
-npm install && cp .env.example .env
-npm run build
-npm run chat -- --new-room "test" --user "name"
-npm test  # 35项全部通过
+npm install
+npm run build  # 当前 src/ 编译有错误，待对接
 ```
 
-## 关键文件
+## 两张开发表
 
-| 文件 | 行数 | 职责 |
-|------|------|------|
-| cli/commands/chat.ts | ~1300 | 38个命令 + 主循环 |
-| gateway/server.ts | ~340 | HTTP+WS Gateway + AI协调 |
-| context/engine.ts | ~220 | 上下文动态组装 |
-| mediator/engine.ts | ~180 | 跨用户感知 + 冲突检测 |
-| tools/builtin/file.ts | ~280 | 文件读写/编辑/批量编辑 |
-| sessions/store.ts | ~140 | SQLite会话CRUD |
-| llm/providers/openai-completions.ts | ~120 | DeepSeek/Ollama适配 |
+见 `docs/v2-architecture.md`

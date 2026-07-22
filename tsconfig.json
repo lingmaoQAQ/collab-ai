@@ -4,19 +4,30 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "outDir": "dist",
-    "rootDir": "src",
+    "rootDir": ".",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
+    "declaration": false,
+    "sourceMap": false,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "verbatimModuleSyntax": true,
-    "lib": ["ES2023"]
+    "verbatimModuleSyntax": false,
+    "lib": ["ES2023"],
+    "baseUrl": ".",
+    "paths": {
+      "@openclaw/llm-core": ["./packages/llm-core/src/index.ts"],
+      "@openclaw/llm-core/types": ["./packages/llm-core/src/types.ts"],
+      "@openclaw/llm-core/event-stream": ["./packages/llm-core/src/utils/event-stream.ts"],
+      "@openclaw/llm-core/diagnostics": ["./packages/llm-core/src/utils/diagnostics.ts"],
+      "@openclaw/ai/event-stream": ["./packages/ai/src/utils/event-stream.ts"],
+      "@openclaw/ai": ["./packages/ai/src/index.ts"],
+      "@openclaw/ai/*": ["./packages/ai/src/*"],
+      "@openclaw/normalization-core/*": ["./packages/normalization-core/src/*"],
+      "@openclaw/agent-core": ["./packages/agent-core/src/index.ts"],
+      "@openclaw/agent-core/*": ["./packages/agent-core/src/*"]
+    }
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["src/**/*.ts", "packages/**/*.ts"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts"]
 }
