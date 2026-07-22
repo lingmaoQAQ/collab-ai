@@ -186,7 +186,11 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
     const workspace = url.searchParams.get("workspace") || process.cwd();
 
     const user = userMgr.getOrCreate(userName);
-    const room = roomMgr.get(roomId);
+    // 支持短ID前缀匹配
+    let room = roomMgr.get(roomId);
+    if (!room && roomId.length >= 6) {
+      room = (roomMgr.list() as any[]).find((r: any) => r.id?.startsWith(roomId)) || null;
+    }
 
     if (!room) {
       send(ws, { type: "error", message: CollabError.notFound("room").message });

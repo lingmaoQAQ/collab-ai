@@ -243,7 +243,7 @@ export function registerChatCommand(program: Command): void {
         // 交互循环
         const rl = readline.createInterface({
           input: process.stdin, output: process.stdout,
-          prompt: `[${userName}] > `,
+          prompt: `\n[${userName}] > `,
         });
         rl.prompt();
 
