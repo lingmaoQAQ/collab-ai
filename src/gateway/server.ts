@@ -2,6 +2,9 @@
 // 不仅是消息中转，更是项目 AI 大脑：接收消息 → 组装上下文 → LLM 回复
 
 import { createServer, type IncomingMessage } from "node:http";
+import { readFileSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
 import { getDatabase } from "../sessions/database.js";
 import { UserManager, RoomManager } from "../identity/manager.js";
@@ -69,6 +72,54 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
   const server = createServer((req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Content-Type", "application/json");
+
+    // Dashboard HTML
+    if (req.url === "/" || req.url === "/dashboard.html") {
+      try {
+        const htmlPath = resolve(dirname(fileURLToPath(import.meta.url)), "dashboard.html");
+        const html = readFileSync(htmlPath, "utf-8");
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.end(html);
+      } catch {
+        res.end(`<h1>CollabAI Dashboard</h1><p>Dashboard 文件未找到</p>`);
+      }
+      return;
+    }
+
+    // Dashboard API
+    if (req.url === "/dashboard") {
+      const allMembers: Array<{ name: string; workspace: string; roomId: string }> = [];
+      const allMemories: Array<{ key: string; value: string; category: string; roomId: string }> = [];
+      const allEvents: Array<{ event_type: string; userName: string; created_at: string; roomId: string }> = [];
+
+      for (const [_, node] of nodes) {
+        allMembers.push({ name: node.user, workspace: node.workspace, roomId: node.roomId });
+        try {
+          const mem = new MemoryStore(node.roomId, db);
+          const roomMems = mem.list();
+          for (const m of roomMems) {
+            allMemories.push({ key: m.key, value: m.value, category: m.category, roomId: node.roomId });
+          }
+          const evts = events.list(node.roomId, 10);
+          for (const e of evts) {
+            allEvents.push({
+              event_type: e.eventType,
+              userName: e.userName || e.userId || "",
+              created_at: e.createdAt || "",
+              roomId: node.roomId,
+            });
+          }
+        } catch { /* skip */ }
+      }
+
+      res.end(JSON.stringify({
+        members: allMembers,
+        memories: allMemories,
+        events: allEvents,
+        auth: _gatewayToken ? "需要 token" : "开放",
+      }));
+      return;
+    }
 
     if (req.url === "/health") {
       res.end(JSON.stringify({ status: "ok", nodes: nodes.size, ai: !!_runtime }));

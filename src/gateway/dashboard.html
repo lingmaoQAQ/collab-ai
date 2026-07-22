@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CollabAI Dashboard</title>
+<style>
+  :root { --bg: #0d1117; --card: #161b22; --border: #30363d; --text: #c9d1d9; --muted: #8b949e; --accent: #58a6ff; --green: #3fb950; --yellow: #d2991d; --red: #f85149; --purple: #bc8cff; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font: 14px/1.6 -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+  header { background: var(--card); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; align-items: center; gap: 12px; }
+  header h1 { font-size: 20px; color: var(--accent); }
+  header .badge { background: var(--accent); color: #000; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+  main { max-width: 1400px; margin: 0 auto; padding: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 20px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 20px; }
+  .card h2 { font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+  .card h2 .count { font-size: 12px; color: var(--accent); }
+  .stat { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .stat:last-child { border-bottom: none; }
+  .stat .key { color: var(--muted); }
+  .stat .val { font-weight: 600; }
+  .online-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--green); margin-right: 6px; animation: pulse 2s infinite; }
+  .offline-dot { background: var(--muted); animation: none; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .memory-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; margin: 2px; }
+  .tag-decision { background: rgba(248,81,73,.15); color: var(--red); }
+  .tag-knowledge { background: rgba(88,166,255,.15); color: var(--accent); }
+  .tag-style { background: rgba(188,140,255,.15); color: var(--purple); }
+  .timeline-item { padding: 8px 0; border-left: 2px solid var(--border); padding-left: 12px; margin-left: 6px; font-size: 13px; }
+  .timeline-item .time { color: var(--muted); font-size: 11px; }
+  .footer { text-align: center; padding: 20px; color: var(--muted); font-size: 12px; }
+  .refresh { font-size: 11px; color: var(--muted); cursor: pointer; }
+</style>
+</head>
+<body>
+<header>
+  <h1>⬡ CollabAI</h1>
+  <span class="badge" id="version">v1.3</span>
+  <span style="flex:1"></span>
+  <span id="statusText" style="color:var(--green)">● 在线</span>
+  <span class="refresh" onclick="loadAll()" title="刷新">↻ 刷新</span>
+</header>
+<main>
+  <div class="card">
+    <h2>系统状态 <span class="count" id="sysUptime">--</span></h2>
+    <div class="stat"><span class="key">在线节点</span><span class="val" id="sysNodes">--</span></div>
+    <div class="stat"><span class="key">房间数</span><span class="val" id="sysRooms">--</span></div>
+    <div class="stat"><span class="key">AI 状态</span><span class="val" id="sysAI">--</span></div>
+    <div class="stat"><span class="key">认证</span><span class="val" id="sysAuth">--</span></div>
+  </div>
+
+  <div class="card">
+    <h2>在线成员 <span class="count" id="memCount">0</span></h2>
+    <div id="members"></div>
+  </div>
+
+  <div class="card">
+    <h2>项目记忆 <span class="count" id="memCount">0</span></h2>
+    <div id="memories"></div>
+  </div>
+
+  <div class="card">
+    <h2>最近活动</h2>
+    <div id="timeline"></div>
+  </div>
+
+  <div class="card">
+    <h2>房间列表</h2>
+    <div id="rooms"></div>
+  </div>
+</main>
+<div class="footer">CollabAI Dashboard · 自动刷新</div>
+
+<script>
+const API = '';
+let uptime = Date.now();
+
+async function loadAll() {
+  try {
+    const [health, rooms] = await Promise.all([
+      fetch(API + '/health').then(r => r.json()),
+      fetch(API + '/rooms').then(r => r.json()),
+    ]);
+    const dash = await fetch(API + '/dashboard').then(r => r.json());
+
+    document.getElementById('sysNodes').textContent = health.nodes;
+    document.getElementById('sysRooms').textContent = rooms.length;
+    document.getElementById('sysAI').textContent = health.ai ? '已连接' : '未配置';
+    document.getElementById('sysAuth').textContent = dash.auth || '开放';
+    document.getElementById('sysUptime').textContent = fmtTime((Date.now() - uptime) / 1000);
+
+    // 成员
+    const memDiv = document.getElementById('members');
+    document.getElementById('memCount').textContent = dash.members?.length || 0;
+    memDiv.innerHTML = (dash.members || []).map(m =>
+      `<div class="stat"><span><span class="online-dot"></span>${m.name}</span><span class="val">${m.workspace || ''}</span></div>`
+    ).join('') || '<div style="color:var(--muted)">暂无在线成员</div>';
+
+    // 记忆
+    const memDiv2 = document.getElementById('memories');
+    const allMems = dash.memories || dash.allMemories || [];
+    memDiv2.innerHTML = allMems.slice(0, 20).map(m =>
+      `<div style="margin:4px 0"><span class="memory-tag tag-${m.category || 'knowledge'}">${m.category || 'general'}</span> <strong>${m.key}</strong><br><span style="color:var(--muted);font-size:12px">${(m.value||'').slice(0,80)}</span></div>`
+    ).join('') || '<div style="color:var(--muted)">暂无记忆</div>';
+
+    // 时间线
+    const tlDiv = document.getElementById('timeline');
+    const events = dash.events || [];
+    tlDiv.innerHTML = events.slice(0, 10).map(e =>
+      `<div class="timeline-item"><span class="time">${new Date(e.created_at||e.createdAt).toLocaleString('zh-CN')}</span><br>${e.userName||e.user_id||'系统'} ${e.event_type||e.eventType}</div>`
+    ).join('') || '<div style="color:var(--muted)">暂无活动</div>';
+
+    // 房间
+    const roomDiv = document.getElementById('rooms');
+    roomDiv.innerHTML = rooms.map(r =>
+      `<div class="stat"><span class="key">${r.name}</span><span class="val">${r.id?.slice(0,8)}</span></div>`
+    ).join('') || '<div style="color:var(--muted)">暂无房间</div>';
+
+  } catch(e) {
+    document.getElementById('statusText').innerHTML = '<span style="color:var(--red)">● 离线</span>';
+  }
+}
+
+function fmtTime(s) { return s < 60 ? Math.floor(s)+'s' : s < 3600 ? Math.floor(s/60)+'m' : Math.floor(s/3600)+'h'; }
+loadAll();
+setInterval(loadAll, 10000);
+</script>
+</body>
+</html>
