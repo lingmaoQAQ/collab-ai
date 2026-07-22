@@ -2,6 +2,7 @@
 
 import type Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
+import { flushDatabase } from "../sessions/database.js";
 import type { User, Room, RoomMember, RoomRole, UserProfile } from "./types.js";
 
 export class UserManager {
@@ -62,6 +63,7 @@ export class RoomManager {
     ).run(id, name, description);
     // 创建者自动成为 owner
     this.addMember(id, ownerId, "owner");
+    flushDatabase();
     return this.get(id)!;
   }
 

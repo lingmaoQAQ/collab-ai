@@ -117,8 +117,14 @@ function initTables(db: Database.Database): void {
   `);
 }
 
+/** 强制 WAL 写回主文件（多进程共享必需） */
+export function flushDatabase(): void {
+  if (_db) _db.pragma("wal_checkpoint(RESTART)");
+}
+
 export function closeDatabase(): void {
   if (_db) {
+    _db.pragma("wal_checkpoint(TRUNCATE)");
     _db.close();
     _db = null;
   }
