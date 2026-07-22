@@ -3,6 +3,18 @@ import { readFileSync, writeFileSync, existsSync, statSync, readdirSync, mkdirSy
 import { resolve, relative, dirname } from "node:path";
 import { registerTool } from "../registry.js";
 
+function longestCommonSubstring(a: string, b: string): number {
+  let max = 0;
+  for (let i = 0; i < a.length; i++) {
+    for (let j = 0; j < b.length; j++) {
+      let k = 0;
+      while (i + k < a.length && j + k < b.length && a[i + k] === b[j + k]) k++;
+      if (k > max) max = k;
+    }
+  }
+  return max;
+}
+
 function safePath(requested: string): string {
   const root = process.cwd();
   const resolved = resolve(root, requested);
@@ -50,9 +62,10 @@ registerTool(
       ? lines.slice(offset, offset + limit)
       : lines.slice(offset);
 
+    const numbered = slice.map((l, i) => `${String(offset + i + 1).padStart(4)}| ${l}`).join("\n");
     return {
       callId: "",
-      content: slice.join("\n").slice(0, 10240) || "(空文件)",
+      content: numbered.slice(0, 10240) || "(空文件)",
     };
   },
 );
@@ -174,7 +187,23 @@ registerTool(
     }
 
     if (count === 0) {
-      return { callId: "", content: `未找到匹配文本:\n${oldStr.slice(0, 200)}`, isError: true };
+      // 模糊搜索：尝试找到最相似的行，给 AI 上下文
+      const oldFirstLine = oldStr.split("\n")[0].trim();
+      const lines = content.split("\n");
+      let bestLine = -1, bestScore = 0;
+      for (let i = 0; i < lines.length; i++) {
+        const score = longestCommonSubstring(lines[i].trim(), oldFirstLine);
+        if (score > bestScore) { bestScore = score; bestLine = i; }
+      }
+      const ctx = bestLine >= 0
+        ? lines.slice(Math.max(0, bestLine - 2), Math.min(lines.length, bestLine + 3))
+            .map((l, i) => `${String(bestLine - 2 + i + 1).padStart(4)}| ${l}`).join("\n")
+        : content.slice(0, 300);
+      return {
+        callId: "",
+        content: `未找到匹配文本。文件中的相似位置（第${bestLine + 1}行附近）:\n${ctx}\n\n查找的内容:\n${oldStr.slice(0, 200)}`,
+        isError: true,
+      };
     }
     if (count > 1) {
       return {
