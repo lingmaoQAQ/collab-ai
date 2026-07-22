@@ -1,6 +1,13 @@
 // Gateway 协议类型 — JSON-based, extensible
 import type { WebSocket } from "ws";
 
+/** 所有消息共有的基础字段 */
+export interface BaseMessage {
+  msgId?: string;       // 请求ID（用于请求/响应配对）
+  replyTo?: string;     // 回复哪个请求
+  timestamp?: string;   // ISO时间戳
+}
+
 // Node → Gateway
 export type NodeMessage =
   | { type: "hello"; roomId: string; user: string; workspace: string }
@@ -24,7 +31,7 @@ export type GatewayMessage =
   | { type: "task_notify"; taskType: string; from: string; payload: Record<string, unknown>; priority: string; messageId: string; timestamp: string }
   | { type: "task_reply"; replyTo: string; from: string; text: string; accepted: boolean }
   | { type: "tool_call"; callId: string; tool: string; args: Record<string, string> }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string; code?: string; retryable?: boolean };
 
 export interface GatewayNode {
   ws: WebSocket;
