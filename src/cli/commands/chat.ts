@@ -197,16 +197,16 @@ export function registerChatCommand(program: Command): void {
         // 收到 AI 回复
         client.on("ai_response", (msg) => {
           if (msg.type === "ai_response") {
-            console.log(`${aiPrefix()}${msg.text}`);
+            process.stdout.write(`\r\x1b[K${aiPrefix()}${msg.text}\n`);
           }
         });
 
         // 收到广播/通知
         client.on("broadcast", (msg) => {
-          if (msg.type === "broadcast") console.log(`\n${bold(msg.from)}: ${msg.text}`);
+          if (msg.type === "broadcast") process.stdout.write(`\r\x1b[K\n${bold(msg.from)}: ${msg.text}\n`);
         });
         client.on("activity", (msg) => {
-          if (msg.type === "activity") console.log(muted(`\n  ${msg.text}`));
+          if (msg.type === "activity") process.stdout.write(`\r\x1b[K\n${muted("  " + msg.text)}\n`);
         });
         client.on("joined", (msg) => {
           if (msg.type === "joined") console.log(muted(`  → ${msg.user} 上线了 (${msg.workspace})`));
@@ -243,7 +243,7 @@ export function registerChatCommand(program: Command): void {
         // 交互循环
         const rl = readline.createInterface({
           input: process.stdin, output: process.stdout,
-          prompt: `\n[${userName}] > `,
+          prompt: `[${userName}] > `,
         });
         rl.prompt();
 

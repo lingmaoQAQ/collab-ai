@@ -252,15 +252,7 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
 
         switch (msg.type) {
           case "chat": {
-            // 1. 广播"某人在问AI"给其他人
-            broadcast(node.roomId, {
-              type: "activity",
-              from: "系统",
-              text: `${node.user} 正在向 AI 提问...`,
-              timestamp: new Date().toISOString(),
-            }, ws);
-
-            // 2. 加载或创建用户会话
+            // 1. 加载或创建用户会话
             const store = new SessionStore(db);
             let session = store.getLatestForUser(roomId, user.id);
             if (!session) {
@@ -550,8 +542,10 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
             break;
           }
         }
-      } catch (err) {
-        send(ws, { type: "error", message: "消息处理失败" });
+      } catch (err: any) {
+        const msg = err?.message || String(err);
+        log.error("消息处理失败", err);
+        send(ws, { type: "error", message: msg.slice(0, 100) || "消息处理失败" });
       }
     });
 
