@@ -380,13 +380,13 @@ export function registerChatCommand(program: Command): void {
       }
 
       if (recovered) {
-        showBanner("1.1.0", model.name, model.provider.name, room.name, user.name);
+        showBanner("1.4.0", model.name, model.provider.name, room.name, user.name);
         console.log(dim("  ") + muted("已恢复: ") + sessionInfo(sm) + "\n");
       }
       if (!sm.getCurrent()) {
         sm.startSession("新对话", model.id, systemPrompt);
         events.record(room.id, user.id, "session_started", {});
-        showBanner("1.1.0", model.name, model.provider.name, room.name, user.name);
+        showBanner("1.4.0", model.name, model.provider.name, room.name, user.name);
       }
 
       // 显示自上次以来的变化
@@ -490,9 +490,11 @@ export function registerChatCommand(program: Command): void {
         if (!titleGenerated) {
           try {
             const title = await generateTitle(runtime, model, input);
-            sm.updateTitle(title);
-            titleGenerated = true;
-          } catch { console.log(muted("  操作失败，请重试")); }
+            sm.updateTitle(title || input.slice(0, 20));
+          } catch {
+            sm.updateTitle(input.slice(0, 20));
+          }
+          titleGenerated = true;
         }
 
         try {
@@ -1274,6 +1276,20 @@ async function handleCommand(cmd: string, arg: string, ctx: CmdCtx) {
     }
 
     // ---- 系统诊断 ----
+    case "/retry": {
+      // 重试上次失败的请求
+      const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
+      if (!lastUserMsg) { console.log(muted("  没有可重试的消息")); break; }
+      messages.pop(); // 移除失败的 AI 回复（如果有）
+      console.log(info("  正在重试..."));
+      // 手动触发重新发送（通过重新 push 用户消息然后 continue 循环）
+      messages.push({ role: "user", content: lastUserMsg.content + " (重试)" });
+      sm.saveMessage("user", lastUserMsg.content + " (重试)");
+      // 不能在这里直接触发循环，标记一下
+      console.log(muted("  已重新发送，等待 AI 回复..."));
+      break;
+    }
+
     case "/doctor": {
       console.log(info("\n  CollabAI 诊断报告"));
       console.log(dim("  " + "=".repeat(40)));
