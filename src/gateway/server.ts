@@ -204,7 +204,7 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
     nodes.set(ws, { ws, user: userName, roomId: realRoomId, workspace, connectedAt: new Date().toISOString() });
 
     const members = [...nodes.values()]
-      .filter((n) => n.roomId === roomId)
+      .filter((n) => n.roomId === realRoomId)
       .map((n) => ({ name: n.user, workspace: n.workspace }));
     send(ws, { type: "welcome", room: { id: room.id, name: room.name }, members });
 
@@ -212,20 +212,20 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
     try {
       const offlineMsgs = db.prepare(
         `SELECT id, message_json FROM offline_messages WHERE room_id = ? AND target_user = ? AND delivered = 0 ORDER BY id`,
-      ).all(roomId, userName) as Array<{ id: number; message_json: string }>;
+      ).all(realRoomId, userName) as Array<{ id: number; message_json: string }>;
       if (offlineMsgs.length > 0) {
         for (const om of offlineMsgs) {
           try { send(ws, JSON.parse(om.message_json)); } catch { /* skip */ }
         }
         db.prepare(`UPDATE offline_messages SET delivered = 1 WHERE room_id = ? AND target_user = ?`)
-          .run(roomId, userName);
+          .run(realRoomId, userName);
         send(ws, { type: "activity", from: "系统", text: `回放 ${offlineMsgs.length} 条离线消息`, timestamp: new Date().toISOString() });
       }
     } catch { /* ignore */ }
 
     // 发送项目动态摘要
     try {
-      const wn = mediator.whatsNew(roomId, user.id);
+      const wn = mediator.whatsNew(realRoomId, user.id);
       if (wn.activeUsers.length || wn.newMemories.length) {
         const parts: string[] = [];
         for (const u of wn.activeUsers) parts.push(`${u.userName} 在处理 [${u.currentTopic}]`);
@@ -241,7 +241,7 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
       }
     } catch (err) { log.error("操作失败", err); }
 
-    broadcast(roomId, { type: "joined", user: userName, workspace }, ws);
+    broadcast(realRoomId, { type: "joined", user: userName, workspace }, ws);
     console.log(`[Gateway] ${userName} → ${room.name} | 在线: ${nodes.size}`);
 
     ws.on("message", async (raw) => {
@@ -254,11 +254,11 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
           case "chat": {
             // 1. 加载或创建用户会话
             const store = new SessionStore(db);
-            let session = store.getLatestForUser(roomId, user.id);
+            let session = store.getLatestForUser(node.roomId, user.id);
             if (!session) {
-              session = store.create(roomId, user.id, "Gateway 会话", _modelName,
-                "你是 CollabAI 项目的 AI 技术协作者。你有项目全局视角，知道团队成员在做什么。用中文简洁回答。");
-              events.record(roomId, user.id, "session_started", {});
+              session = store.create(node.roomId, user.id, "Gateway 会话", _modelName,
+                "你是 AI 技术协作者，了解项目全局。用中文简洁回答。");
+              events.record(node.roomId, user.id, "session_started", {});
             }
             store.addMessage({ sessionId: session.id, role: "user", content: msg.text });
 
@@ -277,7 +277,7 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
 
             // 4. ContextEngine 组装项目上下文
             const assembled = engine.assemble({
-              roomId, userId: user.id, sessionId: session.id,
+              roomId: node.roomId, userId: user.id, sessionId: session.id,
               systemPrompt: "你是 AI 技术协作者，了解项目全局。用中文简洁回答。",
               messages, maxTokens: Math.floor((_model?.contextWindow || 128000) * 0.4),
             });
@@ -286,7 +286,7 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
             let crossUserText = "";
             try {
               const enhanced = await mediator.enhanceContext({
-                roomId, userId: user.id,
+                roomId: node.roomId, userId: user.id,
                 projectContext: assembled.systemPromptAddition || "",
               }, _runtime, _model);
               crossUserText = enhanced.addition;
@@ -359,7 +359,7 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
 
             // 8. 保存AI回复
             store.addMessage({ sessionId: session.id, role: "assistant", content: responseText });
-            events.record(roomId, user.id, "message_sent", { sessionId: session.id });
+            events.record(node.roomId, user.id, "message_sent", { sessionId: session.id });
 
             // 8.5 自动变更检测：AI 改了文件 → 查 Org Graph → 建议通知
             let changeSuggestion = "";
@@ -402,18 +402,9 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
               timestamp: new Date().toISOString(),
             });
 
-            // 10. 通知其他人 AI 回复了什么（摘要）
-            const preview = responseText.slice(0, 80) + (responseText.length > 80 ? "..." : "");
-            broadcast(node.roomId, {
-              type: "activity",
-              from: "系统",
-              text: `AI 回复了 ${node.user}: ${preview}`,
-              timestamp: new Date().toISOString(),
-            }, ws);
-
-            // 11. 学习风格
+            // 10. 学习风格
             mediator.analyzeTurn(
-              { roomId, userId: user.id, userMessage: msg.text, aiResponse: responseText },
+              { roomId: node.roomId, userId: user.id, userMessage: msg.text, aiResponse: responseText },
               _runtime, _model,
             ).catch(() => {});
             break;
