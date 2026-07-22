@@ -552,23 +552,20 @@ export function registerChatCommand(program: Command): void {
               onText: (t) => renderer.write(t),
               onToolUse: (tc) => {
                 toolCount++;
-                const isEdit = ["edit_file", "write_file", "batch_edit"].includes(tc.name);
-                const marker = isEdit ? "✏️" : "⚡";
                 const args = tc.arguments as Record<string, any>;
-                const path = args.path || "";
-                const shortPath = path.replace(/\\/g, "/").split("/").pop() || path;
+                const path = (args.path || args.command || "").replace(/\\/g, "/");
 
-                if (isEdit) {
-                  // 编辑类：显示文件 + 变化预览
+                if (["edit_file", "write_file", "batch_edit"].includes(tc.name)) {
                   const oldS = (args.old_string || "").slice(0, 50).replace(/\n/g, "\\n");
                   const newS = (args.new_string || "").slice(0, 50).replace(/\n/g, "\\n");
-                  console.log(
-                    "\n  " + muted(`${marker} 编辑 `) + bold(shortPath) +
-                    dim(`\n    - ${oldS}...`) +
-                    dim(`\n    + ${newS}...`),
-                  );
+                  const shortPath = path.split("/").pop() || path;
+                  console.log("\n  " + muted(`✏️ 编辑 ${shortPath}`) + dim(`\n    - ${oldS}...\n    + ${newS}...`));
+                } else if (tc.name === "run_command") {
+                  // 命令执行：醒目标注
+                  const shell = process.env.PSModulePath ? "PS" : process.env.SHELL ? "bash" : "cmd";
+                  console.log("\n  " + highlight(`▶ ${shell}> `) + bold(path.slice(0, 100)));
                 } else {
-                  console.log("\n  " + muted(`${marker} ${tc.name} `) + dim(path || ""));
+                  console.log("\n  " + muted(`⚡ ${tc.name} `) + dim(path.slice(0, 60)));
                 }
               },
             });
