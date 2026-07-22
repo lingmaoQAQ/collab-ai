@@ -82,6 +82,12 @@ See [ROADMAP.md](ROADMAP.md). Key milestones:
 
 ### License
 
+### Web Dashboard
+
+Gateway ships with a real-time dashboard at `http://localhost:3000` — system status, online members, memory map, activity timeline.
+
+### License
+
 MIT | [CONTRIBUTING.md](CONTRIBUTING.md) | [中文使用文档](docs/USER-GUIDE.md)
 
 ---

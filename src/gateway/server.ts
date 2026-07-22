@@ -86,22 +86,27 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
       return;
     }
 
-    // Dashboard API
-    if (req.url === "/dashboard") {
-      const allMembers: Array<{ name: string; workspace: string; roomId: string }> = [];
+    // Dashboard API（支持 ?room=id 筛选）
+    if (req.url?.startsWith("/dashboard")) {
+      const url = new URL(req.url, "http://localhost");
+      const filterRoom = url.searchParams.get("room") || "";
+
+      const allMembers: Array<{ name: string; workspace: string; roomId: string; roomName: string }> = [];
       const allMemories: Array<{ key: string; value: string; category: string; roomId: string }> = [];
       const allEvents: Array<{ event_type: string; userName: string; created_at: string; roomId: string }> = [];
+      const roomSet = new Set<string>();
 
       for (const [_, node] of nodes) {
-        allMembers.push({ name: node.user, workspace: node.workspace, roomId: node.roomId });
+        if (filterRoom && node.roomId !== filterRoom) continue;
+        const r = roomMgr.get(node.roomId);
+        allMembers.push({ name: node.user, workspace: node.workspace, roomId: node.roomId, roomName: r?.name || "" });
+        roomSet.add(node.roomId);
         try {
           const mem = new MemoryStore(node.roomId, db);
-          const roomMems = mem.list();
-          for (const m of roomMems) {
+          for (const m of mem.list()) {
             allMemories.push({ key: m.key, value: m.value, category: m.category, roomId: node.roomId });
           }
-          const evts = events.list(node.roomId, 10);
-          for (const e of evts) {
+          for (const e of events.list(node.roomId, 10)) {
             allEvents.push({
               event_type: e.eventType,
               userName: e.userName || e.userId || "",
@@ -112,11 +117,17 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
         } catch { /* skip */ }
       }
 
+      // 所有房间列表
+      const allRooms = roomMgr.list().map((r: any) => ({ id: r.id, name: r.name, memberCount: 0 }));
+
       res.end(JSON.stringify({
         members: allMembers,
         memories: allMemories,
         events: allEvents,
+        rooms: allRooms,
         auth: _gatewayToken ? "需要 token" : "开放",
+        nodeCount: nodes.size,
+        aiAvailable: !!_runtime,
       }));
       return;
     }

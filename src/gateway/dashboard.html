@@ -1,129 +1,163 @@
 <!DOCTYPE html>
 <html lang="zh" data-theme="dark">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>CollabAI Dashboard</title>
 <style>
-  :root { --bg: #0d1117; --card: #161b22; --border: #30363d; --text: #c9d1d9; --muted: #8b949e; --accent: #58a6ff; --green: #3fb950; --yellow: #d2991d; --red: #f85149; --purple: #bc8cff; }
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { font: 14px/1.6 -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
-  header { background: var(--card); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; align-items: center; gap: 12px; }
-  header h1 { font-size: 20px; color: var(--accent); }
-  header .badge { background: var(--accent); color: #000; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 600; }
-  main { max-width: 1400px; margin: 0 auto; padding: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 20px; }
-  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 20px; }
-  .card h2 { font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
-  .card h2 .count { font-size: 12px; color: var(--accent); }
-  .stat { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
-  .stat:last-child { border-bottom: none; }
-  .stat .key { color: var(--muted); }
-  .stat .val { font-weight: 600; }
-  .online-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--green); margin-right: 6px; animation: pulse 2s infinite; }
-  .offline-dot { background: var(--muted); animation: none; }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
-  .memory-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; margin: 2px; }
-  .tag-decision { background: rgba(248,81,73,.15); color: var(--red); }
-  .tag-knowledge { background: rgba(88,166,255,.15); color: var(--accent); }
-  .tag-style { background: rgba(188,140,255,.15); color: var(--purple); }
-  .timeline-item { padding: 8px 0; border-left: 2px solid var(--border); padding-left: 12px; margin-left: 6px; font-size: 13px; }
-  .timeline-item .time { color: var(--muted); font-size: 11px; }
-  .footer { text-align: center; padding: 20px; color: var(--muted); font-size: 12px; }
-  .refresh { font-size: 11px; color: var(--muted); cursor: pointer; }
+:root{--bg:#0d1117;--card:#161b22;--border:#30363d;--text:#c9d1d9;--muted:#8b949e;--accent:#58a6ff;--green:#3fb950;--yellow:#d2991d;--red:#f85149;--purple:#bc8cff;--orange:#f0883e}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font:14px/1.6 -apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+header{background:var(--card);border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+header h1{font-size:18px;color:var(--accent)}
+.badge{background:var(--accent);color:#000;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+select,button{background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 12px;font-size:13px;cursor:pointer}
+main{max-width:1400px;margin:0 auto;padding:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px;transition:border-color .3s}
+.card:hover{border-color:var(--accent)}
+.card h2{font-size:13px;color:var(--muted);letter-spacing:1px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+.card h2 .count{font-size:11px;color:var(--accent)}
+.stat{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.03);font-size:13px}
+.stat:last-child{border-bottom:none}
+.stat .key{color:var(--muted)}.stat .val{font-weight:600}
+.online-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:6px;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.memory-tag{display:inline-block;padding:1px 7px;border-radius:4px;font-size:10px;margin:2px;font-weight:600}
+.tag-decision{background:rgba(248,81,73,.12);color:var(--red)}
+.tag-knowledge{background:rgba(88,166,255,.12);color:var(--accent)}
+.tag-style{background:rgba(188,140,255,.12);color:var(--purple)}
+.tag-general{background:rgba(240,136,62,.12);color:var(--orange)}
+.timeline-item{padding:6px 0 6px 12px;border-left:2px solid var(--border);margin-left:6px;font-size:12px}
+.timeline-item .time{color:var(--muted);font-size:10px}
+.timeline-item .evt{color:var(--accent);font-weight:600}
+.footer{text-align:center;padding:16px;color:var(--muted);font-size:11px}
+.live-dot{width:6px;height:6px;background:var(--green);border-radius:50%;display:inline-block;animation:pulse 1.5s infinite}
+.mem-row{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0}
+.connector{background:var(--border);height:2px;flex:1;min-width:20px}
+.node-box{text-align:center;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:12px;min-width:80px}
+.node-box .dot{display:block;width:8px;height:8px;border-radius:50%;background:var(--green);margin:0 auto 4px}
 </style>
 </head>
 <body>
 <header>
-  <h1>⬡ CollabAI</h1>
-  <span class="badge" id="version">v1.3</span>
+  <h1>⬡ CollabAI</h1><span class="badge" id="ver">v1.3</span>
   <span style="flex:1"></span>
-  <span id="statusText" style="color:var(--green)">● 在线</span>
-  <span class="refresh" onclick="loadAll()" title="刷新">↻ 刷新</span>
+  <select id="roomFilter" onchange="loadAll()"><option value="">所有房间</option></select>
+  <span class="live-dot" id="liveDot" title="实时更新"></span>
+  <span id="lastUpdate" style="color:var(--muted);font-size:11px"></span>
 </header>
 <main>
   <div class="card">
-    <h2>系统状态 <span class="count" id="sysUptime">--</span></h2>
-    <div class="stat"><span class="key">在线节点</span><span class="val" id="sysNodes">--</span></div>
-    <div class="stat"><span class="key">房间数</span><span class="val" id="sysRooms">--</span></div>
-    <div class="stat"><span class="key">AI 状态</span><span class="val" id="sysAI">--</span></div>
-    <div class="stat"><span class="key">认证</span><span class="val" id="sysAuth">--</span></div>
+    <h2>系统概览</h2>
+    <div class="stat"><span class="key">在线节点</span><span class="val" id="nodeCount">--</span></div>
+    <div class="stat"><span class="key">AI 状态</span><span class="val" id="aiStatus">--</span></div>
+    <div class="stat"><span class="key">认证模式</span><span class="val" id="authMode">--</span></div>
+    <div class="stat"><span class="key">运行时间</span><span class="val" id="uptime">--</span></div>
   </div>
-
   <div class="card">
-    <h2>在线成员 <span class="count" id="memCount">0</span></h2>
+    <h2>在线成员 <span class="count" id="memCnt">0</span></h2>
     <div id="members"></div>
   </div>
-
   <div class="card">
-    <h2>项目记忆 <span class="count" id="memCount">0</span></h2>
+    <h2>项目记忆 <span class="count" id="memCnt2">0</span></h2>
     <div id="memories"></div>
   </div>
-
   <div class="card">
-    <h2>最近活动</h2>
+    <h2>活动时间线</h2>
     <div id="timeline"></div>
   </div>
-
   <div class="card">
-    <h2>房间列表</h2>
-    <div id="rooms"></div>
+    <h2>房间与拓扑</h2>
+    <div id="topology"></div>
   </div>
 </main>
-<div class="footer">CollabAI Dashboard · 自动刷新</div>
+<div class="footer">CollabAI Dashboard · 10秒自动刷新 · <span id="connStatus" style="color:var(--green)">已连接</span></div>
 
 <script>
-const API = '';
-let uptime = Date.now();
+const API='';let uptime=Date.now(),ws=null,lastData=null;
+const roomFilter=document.getElementById('roomFilter');
 
-async function loadAll() {
-  try {
-    const [health, rooms] = await Promise.all([
-      fetch(API + '/health').then(r => r.json()),
-      fetch(API + '/rooms').then(r => r.json()),
+function connectWS(){
+  const proto=location.protocol==='https:'?'wss:':'ws:';
+  ws=new WebSocket(proto+'//'+location.host+'/ws?room=dashboard&user=Dashboard&workspace=web');
+  ws.onmessage=()=>{loadAll();};
+  ws.onopen=()=>{document.getElementById('connStatus').innerHTML='<span style="color:var(--green)">WS已连接</span>'};
+  ws.onclose=()=>{document.getElementById('connStatus').innerHTML='<span style="color:var(--yellow)">WS断开，使用轮询</span>';setTimeout(connectWS,5000)};
+}
+try{connectWS()}catch(e){}
+
+async function loadAll(){
+  const room=roomFilter.value;
+  try{
+    const [health,rooms,dash]=await Promise.all([
+      fetch(API+'/health').then(r=>r.json()),
+      fetch(API+'/rooms').then(r=>r.json()),
+      fetch(API+'/dashboard'+(room?'?room='+room:'')).then(r=>r.json()),
     ]);
-    const dash = await fetch(API + '/dashboard').then(r => r.json());
+    lastData={health,rooms,dash};
+    document.getElementById('nodeCount').textContent=dash.nodeCount||health.nodes;
+    document.getElementById('aiStatus').textContent=dash.aiAvailable?'已连接':'未配置';
+    document.getElementById('authMode').textContent=dash.auth||'开放';
+    document.getElementById('uptime').textContent=fmtTime((Date.now()-uptime)/1000);
+    document.getElementById('lastUpdate').textContent=new Date().toLocaleTimeString('zh-CN');
 
-    document.getElementById('sysNodes').textContent = health.nodes;
-    document.getElementById('sysRooms').textContent = rooms.length;
-    document.getElementById('sysAI').textContent = health.ai ? '已连接' : '未配置';
-    document.getElementById('sysAuth').textContent = dash.auth || '开放';
-    document.getElementById('sysUptime').textContent = fmtTime((Date.now() - uptime) / 1000);
+    // Room filter
+    if(roomFilter.options.length<=1){
+      roomFilter.innerHTML='<option value="">所有房间</option>';
+      for(const r of rooms)roomFilter.innerHTML+=`<option value="${r.id}">${r.name}</option>`;
+    }
 
-    // 成员
-    const memDiv = document.getElementById('members');
-    document.getElementById('memCount').textContent = dash.members?.length || 0;
-    memDiv.innerHTML = (dash.members || []).map(m =>
-      `<div class="stat"><span><span class="online-dot"></span>${m.name}</span><span class="val">${m.workspace || ''}</span></div>`
-    ).join('') || '<div style="color:var(--muted)">暂无在线成员</div>';
+    // Members
+    const mdiv=document.getElementById('members');
+    document.getElementById('memCnt').textContent=(dash.members||[]).length;
+    mdiv.innerHTML=(dash.members||[]).map(m=>
+      `<div class="stat"><span><span class="online-dot"></span>${m.name}</span><span class="val" style="font-size:11px;color:var(--muted)">${m.roomName||m.roomId?.slice(0,6)||''} · ${m.workspace||''}</span></div>`
+    ).join('')||'<div style="color:var(--muted)">暂无在线成员</div>';
 
-    // 记忆
-    const memDiv2 = document.getElementById('memories');
-    const allMems = dash.memories || dash.allMemories || [];
-    memDiv2.innerHTML = allMems.slice(0, 20).map(m =>
-      `<div style="margin:4px 0"><span class="memory-tag tag-${m.category || 'knowledge'}">${m.category || 'general'}</span> <strong>${m.key}</strong><br><span style="color:var(--muted);font-size:12px">${(m.value||'').slice(0,80)}</span></div>`
-    ).join('') || '<div style="color:var(--muted)">暂无记忆</div>';
+    // Memories
+    const mems=dash.memories||[];
+    document.getElementById('memCnt2').textContent=mems.length;
+    const memDiv=document.getElementById('memories');
+    if(!mems.length){memDiv.innerHTML='<div style="color:var(--muted)">暂无记忆</div>'}
+    else{
+      // Group by category
+      const cats:Record<string,any[]>= {};
+      for(const m of mems){if(!cats[m.category])cats[m.category]=[];cats[m.category].push(m);}
+      memDiv.innerHTML=Object.entries(cats).map(([cat,items])=>
+        `<div style="margin-bottom:8px"><span class="memory-tag tag-${cat}">${cat}</span> (${items.length})<div class="mem-row">${items.slice(0,8).map(m=>`<span style="font-size:12px;color:var(--text)">${m.key}</span>`).join('')}</div></div>`
+      ).join('');
+    }
 
-    // 时间线
-    const tlDiv = document.getElementById('timeline');
-    const events = dash.events || [];
-    tlDiv.innerHTML = events.slice(0, 10).map(e =>
-      `<div class="timeline-item"><span class="time">${new Date(e.created_at||e.createdAt).toLocaleString('zh-CN')}</span><br>${e.userName||e.user_id||'系统'} ${e.event_type||e.eventType}</div>`
-    ).join('') || '<div style="color:var(--muted)">暂无活动</div>';
+    // Timeline
+    const evts=dash.events||[];
+    document.getElementById('timeline').innerHTML=evts.slice(0,10).map(e=>
+      `<div class="timeline-item"><span class="time">${formatDate(e.created_at)}</span><br><span class="evt">${e.event_type}</span> ${e.userName||''}</div>`
+    ).join('')||'<div style="color:var(--muted)">暂无活动</div>';
 
-    // 房间
-    const roomDiv = document.getElementById('rooms');
-    roomDiv.innerHTML = rooms.map(r =>
-      `<div class="stat"><span class="key">${r.name}</span><span class="val">${r.id?.slice(0,8)}</span></div>`
-    ).join('') || '<div style="color:var(--muted)">暂无房间</div>';
+    // Topology - show room structure
+    const topDiv=document.getElementById('topology');
+    const roomMap=new Map<string,{name:string,members:any[]}>();
+    for(const m of (dash.members||[])){
+      if(!roomMap.has(m.roomId))roomMap.set(m.roomId,{name:m.roomName||m.roomId.slice(0,8),members:[]});
+      roomMap.get(m.roomId)!.members.push(m);
+    }
+    topDiv.innerHTML=Array.from(roomMap.entries()).map(([rid,rinfo])=>
+      `<div style="margin-bottom:10px">
+        <div style="font-weight:600;color:var(--accent);margin-bottom:4px">${rinfo.name}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          ${rinfo.members.map(m=>`<div class="node-box"><span class="dot"></span>${m.name}</div>`).join('')}
+          ${!rinfo.members.length?'<span style="color:var(--muted);font-size:12px">无在线成员</span>':''}
+        </div>
+      </div>`
+    ).join('')||'<div style="color:var(--muted)">暂无活动房间</div>';
 
-  } catch(e) {
-    document.getElementById('statusText').innerHTML = '<span style="color:var(--red)">● 离线</span>';
+  }catch(e){
+    document.getElementById('lastUpdate').textContent='连接失败';
   }
 }
 
-function fmtTime(s) { return s < 60 ? Math.floor(s)+'s' : s < 3600 ? Math.floor(s/60)+'m' : Math.floor(s/3600)+'h'; }
-loadAll();
-setInterval(loadAll, 10000);
+function fmtTime(s){return s<60?Math.floor(s)+'s':s<3600?Math.floor(s/60)+'m':s<86400?Math.floor(s/3600)+'h':Math.floor(s/86400)+'d'}
+function formatDate(d){if(!d)return'';const dt=new Date(d);return dt.toLocaleDateString('zh-CN')+' '+dt.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})}
+loadAll();setInterval(loadAll,10000);
 </script>
 </body>
 </html>
