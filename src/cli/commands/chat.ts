@@ -520,10 +520,12 @@ export function registerChatCommand(program: Command): void {
             assembled.systemPromptAddition,
             crossUserAddition,
           ].filter(Boolean).join("\n\n");
-          // 工具指令优先，项目上下文在后
+          // Shell信息 + 工具指令优先，项目上下文在后
+          const shellInfo = `[当前Shell: ${process.env.SHELL || process.env.COMSPEC || "unknown"} | 工作目录: ${process.cwd()}]`;
+          const fullPrompt = shellInfo + "\n" + systemPrompt;
           const finalSystem = ctxAdditions
-            ? `${systemPrompt}\n\n---\n\n${ctxAdditions}`
-            : systemPrompt;
+            ? `${fullPrompt}\n\n---\n\n${ctxAdditions}`
+            : fullPrompt;
 
           // AI 工具调用循环（带 fallback 到纯文本）
           const renderer = createStreamRenderer();
@@ -1374,22 +1376,23 @@ async function handleCommand(cmd: string, arg: string, ctx: CmdCtx) {
 
     case "/run": {
       if (!arg) { console.log(error("  用法: /run <命令>")); break; }
-      // 确认执行（危险命令提示）
-      const dangerousWords = ["rm ", "delete", "drop ", "truncate", "format", "mkfs"];
-      const isDangerous = dangerousWords.some((w) => arg.toLowerCase().includes(w));
-      if (isDangerous) {
-        console.log(highlight(`  ⚠ 命令: ${arg}`));
-        console.log(muted("  确认执行? (输入 yes 确认，其他取消)"));
-        const answer = await new Promise<string>((resolve) => {
-          rl.question(dim("  > "), resolve);
+      const shellName = process.env.PSModulePath ? "PowerShell" : process.env.SHELL ? "Bash" : "CMD";
+      console.log(muted(`  [${shellName}] `) + bold(arg));
+      console.log(muted("  按 Enter 执行，输入 n 取消"));
+      const answer = await new Promise<string>((r) => rl.question(dim("  > "), r));
+      if (answer.toLowerCase() === "n") { console.log(muted("  已取消")); break; }
+
+      const { execSync } = await import("node:child_process");
+      try {
+        const output = execSync(arg, {
+          cwd: process.cwd(), timeout: 30000, maxBuffer: 1024 * 1024, encoding: "utf-8",
+          shell: process.env.PSModulePath ? "powershell.exe" : process.env.COMSPEC || process.env.SHELL || undefined,
+          windowsHide: true,
         });
-        if (answer.toLowerCase() !== "yes") {
-          console.log(muted("  已取消"));
-          break;
-        }
+        console.log(output.slice(-4000) || "(无输出)");
+      } catch (err: any) {
+        console.log(error(`  [exit ${err.status}] ${(err.stderr || err.message).toString().slice(0, 500)}`));
       }
-      const result = await executeTool({ id: "cli", name: "run_command", arguments: { command: arg } });
-      console.log(result.isError ? error(result.content) : result.content);
       break;
     }
 
