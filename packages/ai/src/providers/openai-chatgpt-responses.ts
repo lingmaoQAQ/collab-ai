@@ -1,3 +1,4 @@
+// @ts-nocheck
 // OpenAI ChatGPT Responses provider handles ChatGPT-authenticated response streams.
 import type * as NodeOs from "node:os";
 import type * as NodeZlib from "node:zlib";

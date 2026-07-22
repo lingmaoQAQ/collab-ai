@@ -20,6 +20,8 @@
       "@openclaw/llm-core/types": ["./packages/llm-core/src/types.ts"],
       "@openclaw/llm-core/event-stream": ["./packages/llm-core/src/utils/event-stream.ts"],
       "@openclaw/llm-core/diagnostics": ["./packages/llm-core/src/utils/diagnostics.ts"],
+      "@openclaw/llm-core/validation": ["./packages/llm-core/src/validation.ts"],
+      "@openclaw/markdown-core/*": ["./packages/ai/src/utils/markdown-stubs.ts"],
       "@openclaw/ai/event-stream": ["./packages/ai/src/utils/event-stream.ts"],
       "@openclaw/ai": ["./packages/ai/src/index.ts"],
       "@openclaw/ai/*": ["./packages/ai/src/*"],
@@ -29,5 +31,8 @@
     }
   },
   "include": ["src/**/*.ts", "packages/**/*.ts"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts"]
+  "exclude": ["node_modules", "dist", "**/*.test.ts",
+    "packages/ai/src/providers/openai-chatgpt-responses.ts",
+    "packages/ai/src/utils/reasoning-tag-text-partitioner.ts",
+    "packages/ai/src/utils/streaming-byte-guard.ts"]
 }

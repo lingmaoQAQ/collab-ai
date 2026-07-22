@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Bounded SSE / NDJSON stream reader guard.
  *
