@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import networkx as nx
-from sympy.combinatorics.named_groups import SymmetricGroup, AlternatingGroup, DihedralGroup
+from sympy.combinatorics.named_groups import SymmetricGroup, AlternatingGroup, DihedralGroup, CyclicGroup
 from sympy.combinatorics import PermutationGroup
 
 def is_prime(n):
@@ -138,3 +138,9 @@ if __name__ == "__main__":
     print("\n" + "🔷" * 30)
     print("示例 5: S4 的导出列 (Derived Series)")
     visualize_normal_series(S4, series_type='derived')
+
+    # 示例 6: 交错群 A5（最小非交换单群，不可解）
+    print("\n" + "🔷" * 30)
+    print("示例 6: 交错群 A5 (Alternating Group of degree 5) — 最小非交换单群")
+    A5 = AlternatingGroup(5)
+    visualize_normal_series(A5, series_type='composition')

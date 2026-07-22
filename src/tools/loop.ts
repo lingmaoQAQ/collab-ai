@@ -17,6 +17,8 @@ export interface ToolLoopOptions {
   onToolUse?: (tool: ToolCall) => void;
   /** 远程工具执行（Gateway 模式）。不传则本地执行。 */
   remoteExecute?: (tool: ToolCall) => Promise<ToolResult>;
+  /** 工具执行前确认。返回 false 则跳过该工具 */
+  confirmTool?: (tool: ToolCall) => Promise<boolean>;
 }
 
 export interface ToolLoopResult {
@@ -132,6 +134,18 @@ export async function runToolLoop(opts: ToolLoopOptions): Promise<ToolLoopResult
 
     // 执行每个工具并添加结果
     for (const tc of currentToolCalls) {
+      // 编辑类工具确认
+      if (opts.confirmTool) {
+        const ok = await opts.confirmTool(tc);
+        if (!ok) {
+          fullMessages.push({
+            role: "tool",
+            content: "用户取消了此操作",
+            tool_call_id: tc.id,
+          } as any);
+          continue;
+        }
+      }
       const result = opts.remoteExecute
         ? await opts.remoteExecute(tc)
         : await executeTool(tc);
