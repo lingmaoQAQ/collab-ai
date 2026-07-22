@@ -159,5 +159,22 @@ export async function runToolLoop(opts: ToolLoopOptions): Promise<ToolLoopResult
     }
   }
 
+  // 如果只用了工具但没回文字，再问一次要文字总结
+  if (!finalText && allToolCalls.length > 0 && rounds < maxToolRounds + 1) {
+    try {
+      for await (const event of runtime.stream({
+        model,
+        system,
+        messages: fullMessages as any,
+        maxTokens: Math.floor((maxTokens || 200) * 0.5),
+        temperature,
+      })) {
+        if (event.type === "text_delta") finalText += event.text;
+      }
+    } catch {
+      finalText = "(工具已执行)";
+    }
+  }
+
   return { finalText, toolCalls: allToolCalls, rounds };
 }
