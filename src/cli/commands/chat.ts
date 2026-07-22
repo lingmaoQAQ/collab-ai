@@ -149,15 +149,32 @@ export function registerChatCommand(program: Command): void {
       if (options.connect) {
         const { GatewayClient } = await import("../../gateway/client.js");
         const client = new GatewayClient();
-        (globalThis as any)._gatewayClient = client; // 供 /task 命令使用
+        (globalThis as any)._gatewayClient = client;
         const wsUrl = options.connect;
-        const roomId = options.room || "default";
         const userName = options.user || "developer";
         const workspace = options.workspace || process.cwd();
+        let roomId = options.room || "";
 
-        console.log(`\n  CollabAI Node v0.7.0`);
-        console.log(`  连接: ${wsUrl}`);
-        console.log(`  房间: ${roomId} | 用户: ${userName}`);
+        // 创建新房间（通过 HTTP API）
+        if (options.newRoom && !roomId) {
+          try {
+            const httpUrl = wsUrl.replace("ws://", "http://").replace("ws:", "http:");
+            const resp = await fetch(`${httpUrl}/rooms`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name: options.newRoom, userId: userName }),
+            });
+            const room = await resp.json() as { id: string };
+            roomId = room.id;
+            console.log(info(`  房间已创建: ${options.newRoom} (${roomId.slice(0, 8)})`));
+          } catch {
+            console.log(error("  无法通过 Gateway 创建房间"));
+            process.exit(1);
+          }
+        }
+        if (!roomId) roomId = "default";
+
+        console.log(`  CollabAI Node | 房间: ${roomId} | 用户: ${userName}`);
         console.log(`  工作区: ${workspace}\n`);
 
         try {

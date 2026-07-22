@@ -13,6 +13,7 @@ export class GatewayClient {
   private url = "";
   private _connected = false;
   private _connecting = false;
+  private _fatalError = false;  // 致命错误不重连
 
   // 重连
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -76,6 +77,7 @@ export class GatewayClient {
             }));
             return;
           }
+          if (msg.type === "error") this._fatalError = true;
           this.emit(msg.type, msg);
           this.emit("*", msg);
         } catch { /* 忽略解析失败 */ }
@@ -86,6 +88,9 @@ export class GatewayClient {
         this._connecting = false;
         this.ws = null;
         this.emit("disconnected", { type: "error", message: "连接已断开" });
+
+        // 致命错误不重连
+        if (this._fatalError) return;
 
         // 自动重连
         if (this.shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
