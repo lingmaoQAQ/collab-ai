@@ -194,25 +194,32 @@ export function registerChatCommand(program: Command): void {
           }
         });
 
-        // 收到 AI 回复
+        // 收到 AI 回复 — 先清当前行再输出
         client.on("ai_response", (msg) => {
           if (msg.type === "ai_response") {
-            process.stdout.write(`\r\x1b[K${aiPrefix()}${msg.text}\n`);
+            process.stdout.write(`\r\x1b[K\r${aiPrefix()}${msg.text}\n`);
           }
         });
 
-        // 收到广播/通知
+        // 通知/加入 — 用 readline 安全输出
         client.on("broadcast", (msg) => {
-          if (msg.type === "broadcast") process.stdout.write(`\r\x1b[K\n${bold(msg.from)}: ${msg.text}\n`);
+          if (msg.type === "broadcast") {
+            process.stdout.write(`\r\x1b[K${bold(msg.from)}: ${msg.text}\n`);
+          }
         });
         client.on("activity", (msg) => {
-          if (msg.type === "activity") process.stdout.write(`\r\x1b[K\n${muted("  " + msg.text)}\n`);
+          if (msg.type === "activity") {
+            process.stdout.write(`\r\x1b[K${muted("  " + msg.text)}\n`);
+          }
         });
         client.on("joined", (msg) => {
-          if (msg.type === "joined") console.log(muted(`  → ${msg.user} 上线了 (${msg.workspace})`));
+          if (msg.type === "joined") process.stdout.write(`\r\x1b[K${muted("  > " + msg.user + " 上线了")}\n`);
         });
         client.on("left", (msg) => {
-          if (msg.type === "left") console.log(muted(`  ← ${msg.user} 下线了`));
+          if (msg.type === "left") process.stdout.write(`\r\x1b[K${muted("  < " + msg.user + " 下线了")}\n`);
+        });
+        client.on("error", (msg) => {
+          if (msg.type === "error") process.stdout.write(`\r\x1b[K${error("  Gateway: " + msg.message)}\n`);
         });
         // 接收结构化任务通知
         client.on("task_notify", (msg) => {

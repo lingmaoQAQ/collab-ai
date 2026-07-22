@@ -257,7 +257,7 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
             let session = store.getLatestForUser(node.roomId, user.id);
             if (!session) {
               session = store.create(node.roomId, user.id, "Gateway 会话", _modelName,
-                "你是 AI 技术协作者，了解项目全局。用中文简洁回答。");
+                "你是 CollabAI 技术协作者。你可以使用 read_file/edit_file/write_file 等工具来读写用户工作区的文件。当用户要求修改代码时，请先读取文件，然后用 edit_file 精确修改。用中文回复。");
               events.record(node.roomId, user.id, "session_started", {});
             }
             store.addMessage({ sessionId: session.id, role: "user", content: msg.text });
