@@ -198,9 +198,10 @@ export async function startGateway(port = 3000, token = ""): Promise<void> {
       return;
     }
 
-    roomMgr.addMember(roomId, user.id, "developer");
-    events.record(roomId, user.id, "member_joined", { workspace });
-    nodes.set(ws, { ws, user: userName, roomId, workspace, connectedAt: new Date().toISOString() });
+    const realRoomId = room.id;
+    roomMgr.addMember(realRoomId, user.id, "developer");
+    events.record(realRoomId, user.id, "member_joined", { workspace });
+    nodes.set(ws, { ws, user: userName, roomId: realRoomId, workspace, connectedAt: new Date().toISOString() });
 
     const members = [...nodes.values()]
       .filter((n) => n.roomId === roomId)
